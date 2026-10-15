@@ -248,6 +248,9 @@ export function getConfig(overrides = {}) {
     /** When true, the server exposes /api/sessions/:id/transcript-stats and (in docker mode) the container bind-mounts each agent class's session dir read-only. On by default; set to '0' to disable. */
     transcriptStatsEnabled: process.env.AGENTS_OBSERVE_TRANSCRIPT_STATS !== '0',
 
+    /** When true, SessionStart injects a reminder about active `.flow/*.md` files into the agent's context. Set to '0' to disable. */
+    flowReminderEnabled: process.env.AGENTS_OBSERVE_FLOW_REMINDER !== '0',
+
     /**
      * Host paths to bind-mount when transcript stats are enabled. One
      * pair per agent class. Defaults assume the standard CLI install

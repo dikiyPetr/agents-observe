@@ -6,6 +6,7 @@ import { postJson, getJson } from './http.mjs'
 import { handleCallbackRequests } from './callbacks.mjs'
 import { startServer } from './docker.mjs'
 import { getAgentClass, getAgentLib } from './agents/index.mjs'
+import { listActiveFlows, buildFlowReminder } from './flow.mjs'
 
 // -- Helpers ----------------------------------------------------------
 
@@ -71,8 +72,23 @@ function muteConsole() {
  * Output a systemMessage JSON to stdout for Claude to surface to the user.
  * This must be the ONLY stdout output — console is muted before this runs.
  */
-function outputClaudeSystemMessage(message) {
-  process.stdout.write(JSON.stringify({ systemMessage: message }) + '\n')
+function outputClaudeSystemMessage(message, additionalContext = null) {
+  const out = { systemMessage: message }
+  if (additionalContext) {
+    out.hookSpecificOutput = { hookEventName: 'SessionStart', additionalContext }
+  }
+  process.stdout.write(JSON.stringify(out) + '\n')
+}
+
+/** SessionStart reminder about active flow files in the session's cwd, or null. */
+function flowReminderFor(config, log, cwd) {
+  if (!config.flowReminderEnabled) return null
+  try {
+    return buildFlowReminder(listActiveFlows(cwd))
+  } catch (err) {
+    log.warn(`Flow reminder failed: ${err.message}`)
+    return null
+  }
 }
 
 /**
@@ -115,15 +131,18 @@ async function sendHookSync(config, log) {
 /**
  * Handle a successful server response: process callbacks and return systemMessage.
  */
-function handleSuccessResponse(result, config, log) {
+function handleSuccessResponse(result, config, log, additionalContext = null) {
   if (result.body?.requests) {
     handleCallbackRequests(result.body.requests, { config, log })
   }
   const serverMessage = result.body?.systemMessage
   if (serverMessage) {
-    outputClaudeSystemMessage(serverMessage)
+    outputClaudeSystemMessage(serverMessage, additionalContext)
   } else {
-    outputClaudeSystemMessage(`Agents Observe: logging events. Dashboard: ${config.baseOrigin}`)
+    outputClaudeSystemMessage(
+      `Agents Observe: logging events. Dashboard: ${config.baseOrigin}`,
+      additionalContext,
+    )
   }
 }
 
@@ -211,10 +230,11 @@ export async function hookAutostartCommand(config, log) {
 
   try {
     const { result, envelope } = await sendHookSync(config, log)
+    const flowContext = flowReminderFor(config, log, envelope?.cwd)
 
     // Server is reachable — handle normally
     if (result && result.status !== 0) {
-      handleSuccessResponse(result, config, log)
+      handleSuccessResponse(result, config, log, flowContext)
       return
     }
 
@@ -223,6 +243,19 @@ export async function hookAutostartCommand(config, log) {
       log.warn('Server unreachable at custom API URL — skipping auto-start')
       outputClaudeSystemMessage(
         `Agents Observe: server unreachable at ${config.apiBaseUrl}. Run /observe status for help.`,
+        flowContext,
+      )
+      return
+    }
+
+    // Auto-start only knows how to launch the Docker container. In local/dev
+    // runtimes the server is started by hand (start.mjs), so just say how.
+    if (config.runtime !== 'docker') {
+      log.warn(`Server not running (runtime=${config.runtime}) — skipping docker auto-start`)
+      outputClaudeSystemMessage(
+        `Agents Observe: server is not running at ${config.baseOrigin}. ` +
+          `Start it with: node ${config.installDir}/start.mjs`,
+        flowContext,
       )
       return
     }
@@ -259,6 +292,7 @@ export async function hookAutostartCommand(config, log) {
         `Agents Observe: server is starting (timed out after ${
           config.hookStartupTimeout / 1000
         }s). Run /observe status to check.`,
+        flowContext,
       )
       return
     }
@@ -280,7 +314,10 @@ export async function hookAutostartCommand(config, log) {
     }
 
     const dashboardUrl = `http://127.0.0.1:${actualPort}`
-    outputClaudeSystemMessage(`Agents Observe: server started. Dashboard: ${dashboardUrl}`)
+    outputClaudeSystemMessage(
+      `Agents Observe: server started. Dashboard: ${dashboardUrl}`,
+      flowContext,
+    )
   } catch (err) {
     log.error(`hook-autostart failed: ${err.message}`)
     outputClaudeSystemMessage(`Agents Observe: internal error. Run /observe status for help.`)

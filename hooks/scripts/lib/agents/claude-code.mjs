@@ -5,13 +5,33 @@
 // contract spec.
 
 import { readFileSync } from 'node:fs'
+import { isAbsolute, resolve } from 'node:path'
 import { defaultLib } from './default.mjs'
+import { matchFlowPath, readFlowFile } from '../flow.mjs'
 
 // Hooks that should explicitly clear pending notifications
 // (Claude-Code-specific naming).
 const CLEARS_NOTIFICATION = new Set(['UserPromptSubmit'])
 // Hooks that mark the session as terminally stopped.
 const STOPS_SESSION = new Set(['SessionEnd'])
+// File-writing tools whose target may be a flow file.
+const FLOW_WRITE_TOOLS = new Set(['Write', 'Edit', 'MultiEdit'])
+
+/**
+ * When a file-writing tool just touched `.flow/<slug>.md`, read the file
+ * from disk so the server gets the full snapshot (Edit payloads only carry
+ * old/new strings). Returns `{ slug, absPath, content }` or null.
+ */
+function readTouchedFlowFile(payload, log) {
+  if (payload?.hook_event_name !== 'PostToolUse') return null
+  if (!FLOW_WRITE_TOOLS.has(payload.tool_name)) return null
+  const filePath = payload.tool_input?.file_path
+  const match = matchFlowPath(filePath)
+  if (!match) return null
+  const absPath = isAbsolute(filePath) ? filePath : resolve(payload.cwd || '.', filePath)
+  const content = readFlowFile(absPath, log)
+  return content == null ? null : { slug: match.slug, absPath, content }
+}
 
 export function buildEnv(config) {
   return defaultLib.buildEnv(config)
@@ -38,6 +58,9 @@ export function buildHookEvent(config, log, payload) {
   if (hookName === 'SessionStart') flags.resolveProject = true
 
   if (Object.keys(flags).length > 0) result.envelope.flags = flags
+
+  const flowFile = readTouchedFlowFile(payload, log)
+  if (flowFile) result.envelope._meta = { ...(result.envelope._meta ?? {}), flowFile }
   return result
 }
 
