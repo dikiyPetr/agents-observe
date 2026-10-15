@@ -29,4 +29,18 @@ router.get('/notifications', async (c) => {
   return c.json(notifications)
 })
 
+// GET /notifications/feed?since=<ts>&limit=<n>
+// Derived notifications (flow steps/deviations/decisions, needs-input,
+// finished), newest first.
+router.get('/notifications/feed', async (c) => {
+  const store = c.get('store')
+  const since = Number(c.req.query('since') ?? 0)
+  const limit = Number(c.req.query('limit') ?? 200)
+  const rows = await store.listNotifications({
+    since: Number.isFinite(since) && since >= 0 ? since : 0,
+    limit: Number.isFinite(limit) ? limit : 200,
+  })
+  return c.json(rows)
+})
+
 export default router

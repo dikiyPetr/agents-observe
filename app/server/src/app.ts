@@ -18,6 +18,7 @@ import healthRouter from './routes/health'
 import consumerRouter from './routes/consumer'
 import callbacksRouter from './routes/callbacks'
 import notificationsRouter from './routes/notifications'
+import flowsRouter from './routes/flows'
 import changelogRouter from './routes/changelog'
 import transcriptStatsRouter from './routes/transcript-stats'
 import modelsRouter from './routes/models'
@@ -59,6 +60,7 @@ export function createApp(
   app.route('/api', consumerRouter)
   app.route('/api', callbacksRouter)
   app.route('/api', notificationsRouter)
+  app.route('/api', flowsRouter)
   app.route('/api', changelogRouter)
   app.route('/api', filtersRouter)
   app.route('/api', transcriptStatsRouter)

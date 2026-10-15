@@ -260,6 +260,13 @@ interface UIState {
   currentView: string | null
   setCurrentView: (view: string | null) => void
 
+  // Session main area: the event stream or the plans (flows) of the
+  // selected agents. `planFocusSlug` highlights/scrolls to one plan.
+  sessionTab: 'events' | 'plan'
+  setSessionTab: (tab: 'events' | 'plan') => void
+  planFocusSlug: string | null
+  setPlanFocusSlug: (slug: string | null) => void
+
   // The session id or project slug from the URL that failed to resolve to a
   // real row. Held (not just logged) so MainPanel can render a "not found"
   // state instead of a blank panel. Compared against the current target, so a
@@ -689,6 +696,11 @@ export const useUIStore = create<UIState>((set, get) => ({
     const state = get()
     updateHash(state.selectedProjectSlug, state.selectedSessionId, view)
   },
+
+  sessionTab: 'events',
+  setSessionTab: (tab) => set({ sessionTab: tab }),
+  planFocusSlug: null,
+  setPlanFocusSlug: (slug) => set({ planFocusSlug: slug }),
 
   routeError: null,
   setRouteError: (idOrSlug) => {

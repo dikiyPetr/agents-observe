@@ -26,11 +26,13 @@ const serverDir = resolve(config.installDir, 'app/server')
 const clientDir = resolve(config.installDir, 'app/client')
 const isDev = config.isDevRuntime
 const skipInstall = process.argv.includes('--skip-install')
+// npm/npx are .cmd shims on Windows and can't be spawned without a shell
+const shell = process.platform === 'win32'
 
 function run(cmd, args, cwd, env = {}) {
   const rel = cwd.replace(config.installDir + '/', '') || '.'
   console.log(`\n> ${cmd} ${args.join(' ')}  (in ${rel})`)
-  execFileSync(cmd, args, { cwd, stdio: 'inherit', env: { ...process.env, ...env } })
+  execFileSync(cmd, args, { cwd, shell, stdio: 'inherit', env: { ...process.env, ...env } })
 }
 
 // 1. Install dependencies
@@ -60,12 +62,14 @@ if (isDev) {
 
   const server = spawn('npm', ['run', 'dev'], {
     cwd: serverDir,
+    shell,
     stdio: 'inherit',
     env: { ...process.env, ...serverEnv },
   })
 
   const client = spawn('npm', ['run', 'dev'], {
     cwd: clientDir,
+    shell,
     stdio: 'inherit',
     env: { ...process.env, ...getClientEnv(config) },
   })
@@ -91,6 +95,7 @@ if (isDev) {
 
   const server = spawn('npx', ['tsx', 'src/index.ts'], {
     cwd: serverDir,
+    shell,
     stdio: 'inherit',
     env: { ...process.env, ...serverEnv },
   })

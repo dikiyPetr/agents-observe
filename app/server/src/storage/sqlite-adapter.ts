@@ -16,6 +16,11 @@ import type {
   EventFilters,
   StoredEvent,
   OrphanRepairResult,
+  FlowSnapshotInput,
+  FlowAgentLink,
+  StoredFlow,
+  NewNotification,
+  StoredNotification,
 } from './types'
 import { DuplicateEventSignatureError } from './types'
 import type { Filter, FilterRow, FilterPattern } from '../types'
@@ -424,6 +429,68 @@ export class SqliteAdapter implements EventStore {
       // customizations to defaults are preserved.
       this.installMissingSeedDefaults()
     }
+
+    // Flows: latest snapshot of each `.flow/<slug>.md` per project (one
+    // plan per agent; parent_slug links a delegated sub-plan to its parent),
+    // plus which (session, agent) edited it. Notifications: derived from
+    // hook events and flow diffs; (flow_id, dedup_key) makes replays harmless.
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS flows (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        project_id      INTEGER NOT NULL,
+        slug            TEXT NOT NULL,
+        abs_path        TEXT NOT NULL,
+        content         TEXT NOT NULL,
+        parsed_json     TEXT NOT NULL,
+        title           TEXT NOT NULL,
+        status          TEXT NOT NULL,
+        updated_ts      INTEGER NOT NULL,
+        last_session_id TEXT,
+        parent_slug     TEXT,
+        parent_step     TEXT,
+        UNIQUE(project_id, slug)
+      )
+    `)
+    const flowCols = new Set(
+      (this.db.prepare('PRAGMA table_info(flows)').all() as { name: string }[]).map((c) => c.name),
+    )
+    if (!flowCols.has('parent_slug')) this.db.exec('ALTER TABLE flows ADD COLUMN parent_slug TEXT')
+    if (!flowCols.has('parent_step')) this.db.exec('ALTER TABLE flows ADD COLUMN parent_step TEXT')
+    // Superseded by flow_agents (only ever existed on pre-release builds).
+    this.db.exec('DROP TABLE IF EXISTS flow_sessions')
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS flow_agents (
+        flow_id    INTEGER NOT NULL,
+        session_id TEXT NOT NULL,
+        agent_id   TEXT NOT NULL,
+        first_ts   INTEGER NOT NULL,
+        last_ts    INTEGER NOT NULL,
+        PRIMARY KEY (flow_id, session_id, agent_id)
+      )
+    `)
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS notifications (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        ts         INTEGER NOT NULL,
+        session_id TEXT,
+        project_id INTEGER,
+        flow_id    INTEGER,
+        event_id   INTEGER,
+        kind       TEXT NOT NULL,
+        level      TEXT NOT NULL,
+        step       TEXT,
+        tags_json  TEXT NOT NULL DEFAULT '[]',
+        title      TEXT NOT NULL,
+        body       TEXT NOT NULL DEFAULT '',
+        dedup_key  TEXT
+      )
+    `)
+    // NULL dedup_key/flow_id never collide in a UNIQUE index, so native
+    // (non-flow) notifications are always inserted.
+    this.db.exec(
+      'CREATE UNIQUE INDEX IF NOT EXISTS idx_notifications_dedup ON notifications(flow_id, dedup_key)',
+    )
+    this.db.exec('CREATE INDEX IF NOT EXISTS idx_notifications_ts ON notifications(ts)')
 
     // Create indexes
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_projects_slug ON projects(slug)')
@@ -1287,6 +1354,13 @@ export class SqliteAdapter implements EventStore {
       .prepare('DELETE FROM sessions WHERE project_id = ?')
       .run(projectId).changes
     this.db.prepare('DELETE FROM projects WHERE id = ?').run(projectId)
+    this.db
+      .prepare(
+        'DELETE FROM flow_agents WHERE flow_id IN (SELECT id FROM flows WHERE project_id = ?)',
+      )
+      .run(projectId)
+    this.db.prepare('DELETE FROM flows WHERE project_id = ?').run(projectId)
+    this.db.prepare('DELETE FROM notifications WHERE project_id = ?').run(projectId)
     return { sessionIds, sessions, agents, events }
   }
 
@@ -1300,7 +1374,187 @@ export class SqliteAdapter implements EventStore {
     const agents = this.db.prepare('DELETE FROM agents WHERE 1=1').run().changes
     const sessions = this.db.prepare('DELETE FROM sessions WHERE 1=1').run().changes
     const projects = this.db.prepare('DELETE FROM projects WHERE 1=1').run().changes
+    this.db.exec('DELETE FROM flow_agents; DELETE FROM flows; DELETE FROM notifications;')
     return { projects, sessions, agents, events }
+  }
+
+  // === Flows ===
+
+  private mapFlow(row: any): StoredFlow {
+    let parsed: unknown = null
+    try {
+      parsed = JSON.parse(row.parsed_json)
+    } catch {
+      // keep null — the client falls back to the raw content
+    }
+    return {
+      id: row.id,
+      projectId: row.project_id,
+      slug: row.slug,
+      absPath: row.abs_path,
+      content: row.content,
+      parsed,
+      title: row.title,
+      status: row.status,
+      updatedTs: row.updated_ts,
+      lastSessionId: row.last_session_id,
+      parentSlug: row.parent_slug ?? null,
+      parentStep: row.parent_step ?? null,
+      agents: this.selectFlowAgents(row.id),
+    }
+  }
+
+  private selectFlowAgents(flowId: number): FlowAgentLink[] {
+    return this.db
+      .prepare(
+        `SELECT session_id AS sessionId, agent_id AS agentId, first_ts AS firstTs, last_ts AS lastTs
+         FROM flow_agents WHERE flow_id = ? ORDER BY last_ts DESC`,
+      )
+      .all(flowId) as FlowAgentLink[]
+  }
+
+  async getFlow(projectId: number, slug: string): Promise<StoredFlow | null> {
+    const row = this.db
+      .prepare('SELECT * FROM flows WHERE project_id = ? AND slug = ?')
+      .get(projectId, slug)
+    return row ? this.mapFlow(row) : null
+  }
+
+  async listFlows(projectId: number): Promise<StoredFlow[]> {
+    return (
+      this.db
+        .prepare('SELECT * FROM flows WHERE project_id = ? ORDER BY updated_ts DESC')
+        .all(projectId) as any[]
+    ).map((r) => this.mapFlow(r))
+  }
+
+  async upsertFlowSnapshot(
+    input: FlowSnapshotInput,
+  ): Promise<{ flow: StoredFlow; applied: boolean }> {
+    const existing = await this.getFlow(input.projectId, input.slug)
+    if (existing && existing.updatedTs > input.updatedTs) {
+      return { flow: existing, applied: false }
+    }
+    this.db
+      .prepare(
+        `INSERT INTO flows (project_id, slug, abs_path, content, parsed_json, title, status, updated_ts,
+                            last_session_id, parent_slug, parent_step)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(project_id, slug) DO UPDATE SET
+           abs_path = excluded.abs_path, content = excluded.content, parsed_json = excluded.parsed_json,
+           title = excluded.title, status = excluded.status, updated_ts = excluded.updated_ts,
+           last_session_id = COALESCE(excluded.last_session_id, flows.last_session_id),
+           parent_slug = excluded.parent_slug, parent_step = excluded.parent_step`,
+      )
+      .run(
+        input.projectId,
+        input.slug,
+        input.absPath,
+        input.content,
+        input.parsedJson,
+        input.title,
+        input.status,
+        input.updatedTs,
+        input.sessionId,
+        input.parentSlug,
+        input.parentStep,
+      )
+    return { flow: (await this.getFlow(input.projectId, input.slug))!, applied: true }
+  }
+
+  async linkFlowAgent(
+    flowId: number,
+    sessionId: string,
+    agentId: string,
+    timestamp: number,
+  ): Promise<void> {
+    this.db
+      .prepare(
+        `INSERT INTO flow_agents (flow_id, session_id, agent_id, first_ts, last_ts) VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(flow_id, session_id, agent_id) DO UPDATE SET
+           first_ts = MIN(flow_agents.first_ts, excluded.first_ts),
+           last_ts = MAX(flow_agents.last_ts, excluded.last_ts)`,
+      )
+      .run(flowId, sessionId, agentId, timestamp, timestamp)
+  }
+
+  async getFlowAgents(flowId: number): Promise<FlowAgentLink[]> {
+    return this.selectFlowAgents(flowId)
+  }
+
+  // === Notifications ===
+
+  private mapNotification(row: any): StoredNotification {
+    let tags: string[] = []
+    try {
+      tags = JSON.parse(row.tags_json)
+    } catch {
+      // ignore malformed tags
+    }
+    return {
+      id: row.id,
+      ts: row.ts,
+      sessionId: row.session_id,
+      projectId: row.project_id,
+      flowId: row.flow_id,
+      eventId: row.event_id,
+      kind: row.kind,
+      level: row.level,
+      step: row.step,
+      tags,
+      title: row.title,
+      body: row.body,
+      dedupKey: row.dedup_key,
+      flowSlug: row.flow_slug ?? null,
+    }
+  }
+
+  private getNotificationById(id: number): StoredNotification | null {
+    const row = this.db
+      .prepare(
+        `SELECT n.*, f.slug AS flow_slug FROM notifications n
+         LEFT JOIN flows f ON f.id = n.flow_id WHERE n.id = ?`,
+      )
+      .get(id)
+    return row ? this.mapNotification(row) : null
+  }
+
+  async insertNotificationIgnore(input: NewNotification): Promise<StoredNotification | null> {
+    const result = this.db
+      .prepare(
+        `INSERT OR IGNORE INTO notifications
+           (ts, session_id, project_id, flow_id, event_id, kind, level, step, tags_json, title, body, dedup_key)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        input.ts,
+        input.sessionId,
+        input.projectId,
+        input.flowId,
+        input.eventId,
+        input.kind,
+        input.level,
+        input.step,
+        JSON.stringify(input.tags ?? []),
+        input.title,
+        input.body,
+        input.dedupKey,
+      )
+    if (result.changes === 0) return null
+    return this.getNotificationById(Number(result.lastInsertRowid))
+  }
+
+  async listNotifications(
+    opts: { since?: number; limit?: number } = {},
+  ): Promise<StoredNotification[]> {
+    const rows = this.db
+      .prepare(
+        `SELECT n.*, f.slug AS flow_slug FROM notifications n
+         LEFT JOIN flows f ON f.id = n.flow_id
+         WHERE n.ts >= ? ORDER BY n.ts DESC, n.id DESC LIMIT ?`,
+      )
+      .all(opts.since ?? 0, Math.min(Math.max(opts.limit ?? 200, 1), 1000)) as any[]
+    return rows.map((r) => this.mapNotification(r))
   }
 
   async deleteSessions(

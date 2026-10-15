@@ -21,6 +21,7 @@ import { DuplicateEventSignatureError } from '../storage/types'
 import type { EventEnvelope, ParsedEvent } from '../types'
 import { validateEnvelope, EnvelopeValidationError } from '../parser'
 import { resolveProject } from '../services/project-resolver'
+import { deriveNotifications, type DerivedNotifications } from '../services/notifications'
 import { computeEventSignature } from '../utils/event-signature'
 import {
   isBackgroundTick,
@@ -207,6 +208,20 @@ router.post('/events', async (c) => {
       await store.stopSession(envelope.sessionId, timestamp)
     }
 
+    // ---- Step 6.5: derived notifications + flow snapshots ----------------
+    // Best-effort: a failure here must never fail the event POST.
+    let derived: DerivedNotifications = { notifications: [], flow: null }
+    try {
+      derived = await deriveNotifications(store, {
+        envelope,
+        eventId,
+        projectId: resolvedProjectId ?? (session?.project_id as number | null | undefined) ?? null,
+        timestamp,
+      })
+    } catch (err) {
+      console.error('[notifications] derivation failed:', err)
+    }
+
     // ---- Step 7: compose response (callbacks) ----------------------------
     // Refresh session row so we see post-upsert slug + the freshly
     // created flag. A request fires only when the session lacks a slug
@@ -267,6 +282,20 @@ router.post('/events', async (c) => {
         type: 'notification_clear',
         data: { sessionId: envelope.sessionId, ts: timestamp },
       })
+    }
+    if (derived.flow) {
+      broadcastToAll({
+        type: 'flow_update',
+        data: {
+          projectId: derived.flow.projectId,
+          slug: derived.flow.slug,
+          status: derived.flow.status,
+          updatedTs: derived.flow.updatedTs,
+        },
+      })
+    }
+    for (const n of derived.notifications) {
+      broadcastToAll({ type: 'notification_v2', data: n })
     }
 
     const responseBody: Record<string, unknown> = { id: eventId }
