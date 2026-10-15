@@ -36,7 +36,8 @@ export function getConfig(overrides = {}) {
     10,
   )
 
-  const homeDir = process.env.HOME || ''
+  // Windows has no HOME by default; USERPROFILE is its equivalent
+  const homeDir = process.env.HOME || process.env.USERPROFILE || ''
   const pluginDataDir = process.env.CLAUDE_PLUGIN_DATA
 
   const serverPortFileName = 'server-port'
