@@ -181,6 +181,68 @@ export interface EventStore {
   resetDefaultFilters(): Promise<Filter[]>
   /** Idempotent. Inserts missing defaults; updates name/pill_name/display/combinator/patterns of existing rows; never touches enabled. */
   seedDefaultFilters(): Promise<void>
+  // === Flows ===
+  getFlow(projectId: number, slug: string): Promise<StoredFlow | null>
+  listFlows(projectId: number): Promise<StoredFlow[]>
+  /**
+   * Insert or replace the latest snapshot of a flow. A snapshot older than
+   * the stored one (out-of-order async hook delivery) is ignored and the
+   * stored row is returned with `applied: false`.
+   */
+  upsertFlowSnapshot(input: FlowSnapshotInput): Promise<{ flow: StoredFlow; applied: boolean }>
+  linkFlowSession(flowId: number, sessionId: string, timestamp: number): Promise<void>
+  getFlowSessions(flowId: number): Promise<{ sessionId: string; firstTs: number; lastTs: number }[]>
+  // === Notifications (derived from events / flow diffs) ===
+  /** Inserts unless (flow_id, dedup_key) already exists. Returns the row, or null when deduped. */
+  insertNotificationIgnore(input: NewNotification): Promise<StoredNotification | null>
+  listNotifications(opts?: { since?: number; limit?: number }): Promise<StoredNotification[]>
+}
+
+export interface FlowSnapshotInput {
+  projectId: number
+  slug: string
+  absPath: string
+  content: string
+  /** JSON of ParsedFlow */
+  parsedJson: string
+  title: string
+  status: string
+  updatedTs: number
+  sessionId: string | null
+}
+
+export interface StoredFlow {
+  id: number
+  projectId: number
+  slug: string
+  absPath: string
+  content: string
+  parsed: unknown
+  title: string
+  status: string
+  updatedTs: number
+  lastSessionId: string | null
+}
+
+export interface NewNotification {
+  ts: number
+  sessionId: string | null
+  projectId: number | null
+  flowId: number | null
+  eventId: number | null
+  kind: string
+  level: 'low' | 'normal' | 'high'
+  step: string | null
+  tags: string[]
+  title: string
+  body: string
+  dedupKey: string | null
+}
+
+export interface StoredNotification extends NewNotification {
+  id: number
+  /** Joined for display/navigation convenience. */
+  flowSlug: string | null
 }
 
 export interface OrphanRepairResult {
