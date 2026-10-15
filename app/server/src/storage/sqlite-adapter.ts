@@ -17,6 +17,7 @@ import type {
   StoredEvent,
   OrphanRepairResult,
   FlowSnapshotInput,
+  FlowAgentLink,
   StoredFlow,
   NewNotification,
   StoredNotification,
@@ -429,9 +430,10 @@ export class SqliteAdapter implements EventStore {
       this.installMissingSeedDefaults()
     }
 
-    // Flows: latest snapshot of each `.flow/<slug>.md` per project, plus
-    // which sessions edited it. Notifications: derived from hook events
-    // and flow diffs; (flow_id, dedup_key) makes replays harmless.
+    // Flows: latest snapshot of each `.flow/<slug>.md` per project (one
+    // plan per agent; parent_slug links a delegated sub-plan to its parent),
+    // plus which (session, agent) edited it. Notifications: derived from
+    // hook events and flow diffs; (flow_id, dedup_key) makes replays harmless.
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS flows (
         id              INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -444,16 +446,26 @@ export class SqliteAdapter implements EventStore {
         status          TEXT NOT NULL,
         updated_ts      INTEGER NOT NULL,
         last_session_id TEXT,
+        parent_slug     TEXT,
+        parent_step     TEXT,
         UNIQUE(project_id, slug)
       )
     `)
+    const flowCols = new Set(
+      (this.db.prepare('PRAGMA table_info(flows)').all() as { name: string }[]).map((c) => c.name),
+    )
+    if (!flowCols.has('parent_slug')) this.db.exec('ALTER TABLE flows ADD COLUMN parent_slug TEXT')
+    if (!flowCols.has('parent_step')) this.db.exec('ALTER TABLE flows ADD COLUMN parent_step TEXT')
+    // Superseded by flow_agents (only ever existed on pre-release builds).
+    this.db.exec('DROP TABLE IF EXISTS flow_sessions')
     this.db.exec(`
-      CREATE TABLE IF NOT EXISTS flow_sessions (
+      CREATE TABLE IF NOT EXISTS flow_agents (
         flow_id    INTEGER NOT NULL,
         session_id TEXT NOT NULL,
+        agent_id   TEXT NOT NULL,
         first_ts   INTEGER NOT NULL,
         last_ts    INTEGER NOT NULL,
-        PRIMARY KEY (flow_id, session_id)
+        PRIMARY KEY (flow_id, session_id, agent_id)
       )
     `)
     this.db.exec(`
@@ -1344,7 +1356,7 @@ export class SqliteAdapter implements EventStore {
     this.db.prepare('DELETE FROM projects WHERE id = ?').run(projectId)
     this.db
       .prepare(
-        'DELETE FROM flow_sessions WHERE flow_id IN (SELECT id FROM flows WHERE project_id = ?)',
+        'DELETE FROM flow_agents WHERE flow_id IN (SELECT id FROM flows WHERE project_id = ?)',
       )
       .run(projectId)
     this.db.prepare('DELETE FROM flows WHERE project_id = ?').run(projectId)
@@ -1362,7 +1374,7 @@ export class SqliteAdapter implements EventStore {
     const agents = this.db.prepare('DELETE FROM agents WHERE 1=1').run().changes
     const sessions = this.db.prepare('DELETE FROM sessions WHERE 1=1').run().changes
     const projects = this.db.prepare('DELETE FROM projects WHERE 1=1').run().changes
-    this.db.exec('DELETE FROM flow_sessions; DELETE FROM flows; DELETE FROM notifications;')
+    this.db.exec('DELETE FROM flow_agents; DELETE FROM flows; DELETE FROM notifications;')
     return { projects, sessions, agents, events }
   }
 
@@ -1386,7 +1398,19 @@ export class SqliteAdapter implements EventStore {
       status: row.status,
       updatedTs: row.updated_ts,
       lastSessionId: row.last_session_id,
+      parentSlug: row.parent_slug ?? null,
+      parentStep: row.parent_step ?? null,
+      agents: this.selectFlowAgents(row.id),
     }
+  }
+
+  private selectFlowAgents(flowId: number): FlowAgentLink[] {
+    return this.db
+      .prepare(
+        `SELECT session_id AS sessionId, agent_id AS agentId, first_ts AS firstTs, last_ts AS lastTs
+         FROM flow_agents WHERE flow_id = ? ORDER BY last_ts DESC`,
+      )
+      .all(flowId) as FlowAgentLink[]
   }
 
   async getFlow(projectId: number, slug: string): Promise<StoredFlow | null> {
@@ -1413,12 +1437,14 @@ export class SqliteAdapter implements EventStore {
     }
     this.db
       .prepare(
-        `INSERT INTO flows (project_id, slug, abs_path, content, parsed_json, title, status, updated_ts, last_session_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO flows (project_id, slug, abs_path, content, parsed_json, title, status, updated_ts,
+                            last_session_id, parent_slug, parent_step)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(project_id, slug) DO UPDATE SET
            abs_path = excluded.abs_path, content = excluded.content, parsed_json = excluded.parsed_json,
            title = excluded.title, status = excluded.status, updated_ts = excluded.updated_ts,
-           last_session_id = COALESCE(excluded.last_session_id, flows.last_session_id)`,
+           last_session_id = COALESCE(excluded.last_session_id, flows.last_session_id),
+           parent_slug = excluded.parent_slug, parent_step = excluded.parent_step`,
       )
       .run(
         input.projectId,
@@ -1430,30 +1456,30 @@ export class SqliteAdapter implements EventStore {
         input.status,
         input.updatedTs,
         input.sessionId,
+        input.parentSlug,
+        input.parentStep,
       )
     return { flow: (await this.getFlow(input.projectId, input.slug))!, applied: true }
   }
 
-  async linkFlowSession(flowId: number, sessionId: string, timestamp: number): Promise<void> {
+  async linkFlowAgent(
+    flowId: number,
+    sessionId: string,
+    agentId: string,
+    timestamp: number,
+  ): Promise<void> {
     this.db
       .prepare(
-        `INSERT INTO flow_sessions (flow_id, session_id, first_ts, last_ts) VALUES (?, ?, ?, ?)
-         ON CONFLICT(flow_id, session_id) DO UPDATE SET
-           first_ts = MIN(flow_sessions.first_ts, excluded.first_ts),
-           last_ts = MAX(flow_sessions.last_ts, excluded.last_ts)`,
+        `INSERT INTO flow_agents (flow_id, session_id, agent_id, first_ts, last_ts) VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(flow_id, session_id, agent_id) DO UPDATE SET
+           first_ts = MIN(flow_agents.first_ts, excluded.first_ts),
+           last_ts = MAX(flow_agents.last_ts, excluded.last_ts)`,
       )
-      .run(flowId, sessionId, timestamp, timestamp)
+      .run(flowId, sessionId, agentId, timestamp, timestamp)
   }
 
-  async getFlowSessions(
-    flowId: number,
-  ): Promise<{ sessionId: string; firstTs: number; lastTs: number }[]> {
-    return this.db
-      .prepare(
-        `SELECT session_id AS sessionId, first_ts AS firstTs, last_ts AS lastTs
-         FROM flow_sessions WHERE flow_id = ? ORDER BY last_ts DESC`,
-      )
-      .all(flowId) as { sessionId: string; firstTs: number; lastTs: number }[]
+  async getFlowAgents(flowId: number): Promise<FlowAgentLink[]> {
+    return this.selectFlowAgents(flowId)
   }
 
   // === Notifications ===

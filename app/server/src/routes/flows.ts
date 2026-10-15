@@ -29,15 +29,13 @@ router.get('/projects/:id/flows', async (c) => {
   return c.json(flows.map(summarize))
 })
 
-// GET /projects/:id/flows/:slug — full flow incl. raw content and linked sessions
+// GET /projects/:id/flows/:slug — full flow incl. raw content and executing agents
 router.get('/projects/:id/flows/:slug', async (c) => {
-  const store = c.get('store')
   const projectId = parseProjectId(c.req.param('id'))
   if (!projectId) return apiError(c, 400, 'Invalid project id')
-  const flow = await store.getFlow(projectId, c.req.param('slug'))
+  const flow = await c.get('store').getFlow(projectId, c.req.param('slug'))
   if (!flow) return apiError(c, 404, 'Flow not found')
-  const sessions = await store.getFlowSessions(flow.id)
-  return c.json({ ...flow, sessions })
+  return c.json(flow)
 })
 
 export default router

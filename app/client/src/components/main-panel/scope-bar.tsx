@@ -2,7 +2,43 @@ import { useUIStore } from '@/stores/ui-store'
 import { Button } from '@/components/ui/button'
 import { LogsModal } from './logs-modal'
 import { AgentCombobox } from './agent-combobox'
-import { ArrowDownToLine, SquarePen, BarChart3, ChevronsDownUp, ChevronsUpDown } from 'lucide-react'
+import {
+  ArrowDownToLine,
+  SquarePen,
+  BarChart3,
+  ChevronsDownUp,
+  ChevronsUpDown,
+  ListChecks,
+  ScrollText,
+} from 'lucide-react'
+import { cn } from '@/lib/utils'
+
+function SessionTabs() {
+  const sessionTab = useUIStore((s) => s.sessionTab)
+  const setSessionTab = useUIStore((s) => s.setSessionTab)
+  const tabs = [
+    { id: 'events' as const, label: 'Events', Icon: ScrollText },
+    { id: 'plan' as const, label: 'Plan', Icon: ListChecks },
+  ]
+  return (
+    <div className="flex items-center rounded-md border border-border p-0.5 shrink-0">
+      {tabs.map(({ id, label, Icon }) => (
+        <button
+          key={id}
+          className={cn(
+            'flex items-center gap-1 rounded px-2 py-0.5 text-xs cursor-pointer transition-colors',
+            sessionTab === id
+              ? 'bg-muted text-foreground'
+              : 'text-muted-foreground hover:text-foreground',
+          )}
+          onClick={() => setSessionTab(id)}
+        >
+          <Icon className="h-3.5 w-3.5" /> {label}
+        </button>
+      ))}
+    </div>
+  )
+}
 
 export function ScopeBar() {
   const {
@@ -24,6 +60,7 @@ export function ScopeBar() {
   return (
     <div className="flex items-center gap-2 px-3 py-2 border-b border-border min-h-[40px]">
       <AgentCombobox />
+      <SessionTabs />
 
       <div className="flex items-center gap-1 shrink-0">
         {/* Follow */}

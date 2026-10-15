@@ -126,8 +126,11 @@ async function deriveFlow(
     status: next.status,
     updatedTs: timestamp,
     sessionId: envelope.sessionId,
+    parentSlug: next.parent,
+    parentStep: next.parentStep,
   })
-  await store.linkFlowSession(flow.id, envelope.sessionId, timestamp)
+  // The agent that edits a flow is the one executing that plan.
+  await store.linkFlowAgent(flow.id, envelope.sessionId, envelope.agentId, timestamp)
   // An older snapshot arriving late must not produce notifications or
   // roll the stored flow back.
   if (!applied) return { notifications: [], flow: null }

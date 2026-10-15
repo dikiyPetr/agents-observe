@@ -42,7 +42,7 @@ describe('parseFlow', () => {
       '---\r\ntitle: T\r\nstatus: done\r\n---\r\n## Steps\r\n- [x] S1 a\r\n## Journal\r\n- info — finished\r\n'
     const f = parseFlow(md)
     expect(f.status).toBe('done')
-    expect(f.steps).toEqual([{ id: 'S1', state: 'done', text: 'a' }])
+    expect(f.steps).toEqual([{ id: 'S1', state: 'done', text: 'a', child: null }])
     expect(f.journal[0]).toMatchObject({ type: 'info', text: 'finished', time: null })
   })
 
@@ -51,7 +51,7 @@ describe('parseFlow', () => {
     const f = parseFlow(md)
     expect(f.title).toBe('Heading title')
     expect(f.status).toBe('active')
-    expect(f.steps).toEqual([{ id: '#1', state: 'todo', text: 'no id' }])
+    expect(f.steps).toEqual([{ id: '#1', state: 'todo', text: 'no id', child: null }])
     expect(f.journal[0]).toMatchObject({
       type: 'info',
       tags: ['risk'],
@@ -64,6 +64,28 @@ describe('parseFlow', () => {
   test('never throws on garbage', () => {
     expect(() => parseFlow('')).not.toThrow()
     expect(parseFlow('').steps).toEqual([])
+  })
+
+  test('reads delegation: parent frontmatter and step → child markers', () => {
+    const md = [
+      '---',
+      'title: UI widget',
+      'parent: port-inventory',
+      'parent_step: S3',
+      '---',
+      '## Steps',
+      '- [~] S1 Layout → widget-layout',
+      '- [ ] S2 Bindings -> .flow/widget-bindings.md',
+      '- [ ] S3 Polish',
+    ].join('\n')
+    const f = parseFlow(md)
+    expect(f.parent).toBe('port-inventory')
+    expect(f.parentStep).toBe('S3')
+    expect(f.steps.map((s) => [s.id, s.text, s.child])).toEqual([
+      ['S1', 'Layout', 'widget-layout'],
+      ['S2', 'Bindings', 'widget-bindings'],
+      ['S3', 'Polish', null],
+    ])
   })
 })
 
@@ -78,10 +100,24 @@ describe('parseJournalLine', () => {
 describe('diffFlow', () => {
   const base = parseFlow(EXAMPLE)
 
-  test('first sighting yields a single flow_started', () => {
+  test('first sighting yields a single "plan created" tagged #plan', () => {
     const drafts = diffFlow(null, base)
     expect(drafts).toHaveLength(1)
-    expect(drafts[0]).toMatchObject({ kind: 'flow_started', dedupKey: 'started' })
+    expect(drafts[0]).toMatchObject({
+      kind: 'plan',
+      title: 'Plan created',
+      tags: ['plan'],
+      dedupKey: 'started',
+    })
+    expect(drafts[0].body).toContain('5 steps')
+  })
+
+  test('sub-plan created mentions the parent step and keeps plan-line tags', () => {
+    const md = `---\ntitle: UI\nparent: port-inventory\nparent_step: S3\n---\n## Steps\n- [ ] S1 a\n## Journal\n- 10:00 plan #ui — делаю виджет\n`
+    const [d] = diffFlow(null, parseFlow(md))
+    expect(d).toMatchObject({ kind: 'plan', title: 'Sub-plan created', step: 'S3' })
+    expect(d.tags).toEqual(['plan', 'ui'])
+    expect(d.body).toContain('part of port-inventory · S3')
   })
 
   test('identical snapshot yields nothing', () => {

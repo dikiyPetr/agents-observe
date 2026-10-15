@@ -190,8 +190,14 @@ export interface EventStore {
    * stored row is returned with `applied: false`.
    */
   upsertFlowSnapshot(input: FlowSnapshotInput): Promise<{ flow: StoredFlow; applied: boolean }>
-  linkFlowSession(flowId: number, sessionId: string, timestamp: number): Promise<void>
-  getFlowSessions(flowId: number): Promise<{ sessionId: string; firstTs: number; lastTs: number }[]>
+  /** Record that `agentId` (in `sessionId`) edited the flow — the agent executing this plan. */
+  linkFlowAgent(
+    flowId: number,
+    sessionId: string,
+    agentId: string,
+    timestamp: number,
+  ): Promise<void>
+  getFlowAgents(flowId: number): Promise<FlowAgentLink[]>
   // === Notifications (derived from events / flow diffs) ===
   /** Inserts unless (flow_id, dedup_key) already exists. Returns the row, or null when deduped. */
   insertNotificationIgnore(input: NewNotification): Promise<StoredNotification | null>
@@ -209,6 +215,15 @@ export interface FlowSnapshotInput {
   status: string
   updatedTs: number
   sessionId: string | null
+  parentSlug: string | null
+  parentStep: string | null
+}
+
+export interface FlowAgentLink {
+  sessionId: string
+  agentId: string
+  firstTs: number
+  lastTs: number
 }
 
 export interface StoredFlow {
@@ -222,6 +237,10 @@ export interface StoredFlow {
   status: string
   updatedTs: number
   lastSessionId: string | null
+  parentSlug: string | null
+  parentStep: string | null
+  /** Agents that edited this flow, most recent first. */
+  agents: FlowAgentLink[]
 }
 
 export interface NewNotification {

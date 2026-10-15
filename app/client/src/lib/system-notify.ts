@@ -29,6 +29,7 @@ const ICONS: Partial<Record<AgentNotification['kind'], string>> = {
   decision: '🧭',
   step: '✅',
   flow_done: '🏁',
+  plan: '📋',
   flow_started: '📋',
   finished: '💤',
   info: 'ℹ️',

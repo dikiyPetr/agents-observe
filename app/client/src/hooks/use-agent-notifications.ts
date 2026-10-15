@@ -8,6 +8,7 @@ import { api } from '@/lib/api-client'
 import type { Project } from '@/types'
 import type { AgentNotification } from '@/types/flow'
 import { evaluateNotification } from '@/lib/notification-rules'
+import { navigateToFlow } from '@/lib/flow-navigation'
 import { playNotificationSound, showSystemNotification } from '@/lib/system-notify'
 import { useAgentNotificationsStore } from '@/stores/agent-notifications-store'
 import { useNotificationRulesStore } from '@/stores/notification-rules-store'
@@ -20,18 +21,19 @@ async function getProjects(queryClient: QueryClient): Promise<Project[]> {
   )
 }
 
-/** Open the flow (if the notification belongs to one) or the session. */
+/**
+ * Open the plan's session on the Plan tab (if the notification belongs to a
+ * flow), otherwise the session itself.
+ */
 export async function navigateToNotification(
   n: AgentNotification,
   queryClient: QueryClient,
 ): Promise<void> {
   const projects = await getProjects(queryClient).catch(() => [] as Project[])
   const project = projects.find((p) => p.id === n.projectId) ?? null
+  if (n.flowSlug && project && (await navigateToFlow(queryClient, project, n.flowSlug))) return
   const ui = useUIStore.getState()
-  if (n.flowSlug && project) {
-    ui.setSelectedProject(project.id, project.slug)
-    useUIStore.getState().openFlow(n.flowSlug)
-  } else if (n.sessionId) {
+  if (n.sessionId) {
     ui.openSession(project?.id ?? null, project?.slug ?? null, n.sessionId)
   } else if (project) {
     ui.setSelectedProject(project.id, project.slug)

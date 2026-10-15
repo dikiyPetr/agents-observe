@@ -6,13 +6,15 @@
 
 export type FlowStatus = 'active' | 'blocked' | 'done'
 export type StepState = 'todo' | 'doing' | 'done' | 'skipped' | 'blocked'
-export type JournalType = 'step' | 'deviation' | 'decision' | 'blocked' | 'info'
+export type JournalType = 'plan' | 'step' | 'deviation' | 'decision' | 'blocked' | 'info'
 export type FlowLevel = 'low' | 'normal' | 'high'
 
 export interface FlowStep {
   id: string
   state: StepState
   text: string
+  /** Slug of the child flow this step was delegated to (`… → <slug>`), if any. */
+  child: string | null
 }
 
 export interface FlowJournalEntry {
@@ -30,6 +32,10 @@ export interface ParsedFlow {
   title: string
   status: FlowStatus
   updated: string | null
+  /** Slug of the parent flow when this plan belongs to a delegated (sub)agent. */
+  parent: string | null
+  /** Step of the parent flow this plan implements. */
+  parentStep: string | null
   goal: string
   steps: FlowStep[]
   journal: FlowJournalEntry[]
@@ -46,7 +52,14 @@ const STEP_MARKERS: Record<string, StepState> = {
   '!': 'blocked',
 }
 
-const JOURNAL_TYPES = new Set<JournalType>(['step', 'deviation', 'decision', 'blocked', 'info'])
+const JOURNAL_TYPES = new Set<JournalType>([
+  'plan',
+  'step',
+  'deviation',
+  'decision',
+  'blocked',
+  'info',
+])
 const LEVELS = new Set<FlowLevel>(['low', 'normal', 'high'])
 const STATUSES = new Set<FlowStatus>(['active', 'blocked', 'done'])
 
@@ -56,6 +69,8 @@ const JOURNAL_HEADING = /^(journal|log|журнал|лог)/i
 
 const STEP_RE = /^\s*[-*]\s+\[(.)\]\s+(?:(S\d+[\w.-]*)\b\s*)?(.*)$/
 const ITEM_RE = /^\s*[-*]\s+(.*)$/
+// Delegation marker at the end of a step: `… → child-slug` (or `->`).
+const CHILD_RE = /\s*(?:→|->)\s*(?:\.flow\/)?([\w.-]+?)(?:\.md)?\s*$/
 // HH:MM type[/level] [S<n>] [#tags…] — text   (separator: — – - or :)
 const JOURNAL_RE =
   /^(?:(\d{1,2}:\d{2})\s+)?([a-z]+)(?:\/([a-z]+))?\s+(?:(S\d+[\w.-]*)\s+)?((?:#[\p{L}\p{N}_-]+\s+)*)(?:[—–:-]\s*)?(.*)$/iu
@@ -149,7 +164,10 @@ export function parseFlow(md: string, fallbackTitle = 'Untitled flow'): ParsedFl
       id = `${id}#${steps.length + 1}`
     }
     seenIds.add(id)
-    steps.push({ id, state, text: m[3].trim() })
+    let text = m[3].trim()
+    const child = text.match(CHILD_RE)
+    if (child) text = text.slice(0, child.index).trim()
+    steps.push({ id, state, text, child: child ? child[1] : null })
   }
 
   const journal: FlowJournalEntry[] = []
@@ -168,6 +186,8 @@ export function parseFlow(md: string, fallbackTitle = 'Untitled flow'): ParsedFl
     title,
     status,
     updated: data.updated || null,
+    parent: data.parent || null,
+    parentStep: data.parent_step || null,
     goal,
     steps,
     journal,

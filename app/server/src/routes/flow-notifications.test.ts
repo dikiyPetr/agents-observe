@@ -43,23 +43,27 @@ beforeEach(async () => {
 })
 
 let seq = 0
-function flowEdit(content: string, timestamp: number, sessionId = 'sess-1') {
+function flowEdit(
+  content: string,
+  timestamp: number,
+  { sessionId = 'sess-1', agentId = sessionId, slug = 'inventory' } = {},
+) {
   return {
     agentClass: 'claude-code',
     sessionId,
-    agentId: sessionId,
+    agentId,
     hookName: 'PostToolUse',
     timestamp,
     cwd: '/game',
     payload: {
       hook_event_name: 'PostToolUse',
       tool_name: 'Edit',
-      tool_input: { file_path: '/game/.flow/inventory.md' },
+      tool_input: { file_path: `/game/.flow/${slug}.md` },
       seq: seq++, // keep signatures distinct between otherwise identical posts
     },
     _meta: {
       project: { slug: 'game' },
-      flowFile: { slug: 'inventory', absPath: '/game/.flow/inventory.md', content },
+      flowFile: { slug, absPath: `/game/.flow/${slug}.md`, content },
     },
   }
 }
@@ -83,9 +87,9 @@ const kinds = (msgs: any[]) =>
   msgs.filter((m) => m.type === 'notification_v2').map((m) => m.data.kind)
 
 describe('flow edits → notifications', () => {
-  test('first sighting stores the flow and emits flow_started only', async () => {
+  test('first sighting stores the flow and emits "plan created" only', async () => {
     await post(flowEdit(EXAMPLE, 1000))
-    expect(kinds(allBroadcasts)).toEqual(['flow_started'])
+    expect(kinds(allBroadcasts)).toEqual(['plan'])
     expect(allBroadcasts.find((m) => m.type === 'flow_update')?.data).toMatchObject({
       slug: 'inventory',
       status: 'active',
@@ -96,7 +100,28 @@ describe('flow edits → notifications', () => {
     const flow = (await res.json()) as any
     expect(flow.title).toBe('Порт инвентаря из Godot')
     expect(flow.parsed.progress).toEqual({ done: 2, total: 5 })
-    expect(flow.sessions.map((s: any) => s.sessionId)).toEqual(['sess-1'])
+    expect(flow.agents.map((a: any) => [a.sessionId, a.agentId])).toEqual([['sess-1', 'sess-1']])
+  })
+
+  test('a sub-plan edited by a subagent links to its parent and records that agent', async () => {
+    await post(flowEdit(EXAMPLE, 1000))
+    const child = `---\ntitle: UI widget\nparent: inventory\nparent_step: S3\n---\n## Steps\n- [ ] S1 layout\n`
+    allBroadcasts = []
+    await post(flowEdit(child, 2000, { agentId: 'sub-ui', slug: 'ui-widget' }))
+    const created = allBroadcasts.find((m) => m.type === 'notification_v2')?.data
+    expect(created).toMatchObject({
+      kind: 'plan',
+      title: 'Sub-plan created',
+      flowSlug: 'ui-widget',
+    })
+
+    const projects = await store.getProjects()
+    const res = await app.request(`/api/projects/${projects[0].id}/flows`)
+    const flows = (await res.json()) as any[]
+    const ui = flows.find((f) => f.slug === 'ui-widget')
+    expect(ui).toMatchObject({ parentSlug: 'inventory', parentStep: 'S3' })
+    expect(ui.agents.map((a: any) => a.agentId)).toEqual(['sub-ui'])
+    expect(ui.content).toBeUndefined()
   })
 
   test('journal line + step done produce exactly the new notifications; replay produces none', async () => {
@@ -116,7 +141,7 @@ describe('flow edits → notifications', () => {
 
     const rows = await feed()
     // Feed is newest first; rows with the same ts come by id desc.
-    expect(rows.map((r) => r.kind)).toEqual(['step', 'decision', 'flow_started'])
+    expect(rows.map((r) => r.kind)).toEqual(['step', 'decision', 'plan'])
     expect(rows[0].flowSlug).toBe('inventory')
   })
 

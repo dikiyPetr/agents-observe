@@ -8,14 +8,7 @@ import { createHash } from 'node:crypto'
 import type { FlowLevel, ParsedFlow } from './parse'
 
 export type FlowNotificationKind =
-  | 'step'
-  | 'deviation'
-  | 'decision'
-  | 'blocked'
-  | 'info'
-  | 'flow_started'
-  | 'flow_done'
-  | 'flow_blocked'
+  'plan' | 'step' | 'deviation' | 'decision' | 'blocked' | 'info' | 'flow_done' | 'flow_blocked'
 
 export interface NotificationDraft {
   kind: FlowNotificationKind
@@ -28,6 +21,7 @@ export interface NotificationDraft {
 }
 
 const JOURNAL_TITLES: Record<string, string> = {
+  plan: 'Plan updated',
   step: 'Step done',
   deviation: 'Deviation from plan',
   decision: 'Autonomous decision',
@@ -43,22 +37,33 @@ function withStep(title: string, step: string | null): string {
   return step ? `${title} · ${step}` : title
 }
 
-export function diffFlow(prev: ParsedFlow | null, next: ParsedFlow): NotificationDraft[] {
-  // First sighting: one quiet "started" notification instead of replaying
-  // the whole existing journal.
-  if (!prev) {
-    return [
-      {
-        kind: 'flow_started',
-        level: 'low',
-        step: null,
-        tags: [],
-        title: 'Flow started',
-        body: next.title,
-        dedupKey: 'started',
-      },
-    ]
+/**
+ * The "plan created" notification, emitted once per flow on first sighting.
+ * Carries the `plan` tag plus the tags of the `plan` journal line (if the
+ * agent wrote one), so rules can route it.
+ */
+function planCreated(next: ParsedFlow): NotificationDraft {
+  const planEntry = next.journal.find((e) => e.type === 'plan')
+  const parts = [`${next.title} · ${next.steps.length} steps`]
+  if (next.parent) {
+    parts.push(`part of ${next.parent}${next.parentStep ? ` · ${next.parentStep}` : ''}`)
   }
+  if (planEntry?.text) parts.push(planEntry.text)
+  return {
+    kind: 'plan',
+    level: planEntry?.level ?? 'normal',
+    step: next.parentStep,
+    tags: [...new Set(['plan', ...(planEntry?.tags ?? [])])],
+    title: next.parent ? 'Sub-plan created' : 'Plan created',
+    body: parts.join('\n'),
+    dedupKey: 'started',
+  }
+}
+
+export function diffFlow(prev: ParsedFlow | null, next: ParsedFlow): NotificationDraft[] {
+  // First sighting: a single "plan created" notification instead of
+  // replaying the whole existing journal.
+  if (!prev) return [planCreated(next)]
 
   const drafts: NotificationDraft[] = []
 
@@ -69,7 +74,7 @@ export function diffFlow(prev: ParsedFlow | null, next: ParsedFlow): Notificatio
       kind: e.type,
       level: e.level,
       step: e.step,
-      tags: e.tags,
+      tags: e.type === 'plan' ? [...new Set(['plan', ...e.tags])] : e.tags,
       title: withStep(JOURNAL_TITLES[e.type], e.step),
       body: e.text,
       dedupKey: `j:${hash(e.raw)}`,
