@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { SettingsModal } from '@/components/settings/settings-modal'
 import { ChangelogModal } from '@/components/changelog-modal'
+import { NotificationCenter } from '@/components/notifications/notification-center'
 
 interface SidebarProps {
   connected: boolean
@@ -87,6 +88,7 @@ export function Sidebar({ connected }: SidebarProps) {
           </button>
         )}
         {!sidebarCollapsed && <div className="flex-1" />}
+        <NotificationCenter collapsed={sidebarCollapsed} />
         <Button
           variant="ghost"
           size="icon"

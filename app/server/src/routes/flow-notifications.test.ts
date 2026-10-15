@@ -14,10 +14,10 @@ type Env = {
   }
 }
 
-const EXAMPLE = readFileSync(join(__dirname, '..', 'flow', 'fixtures', 'example.md'), 'utf8').replace(
-  /\r\n/g,
-  '\n',
-)
+const EXAMPLE = readFileSync(
+  join(__dirname, '..', 'flow', 'fixtures', 'example.md'),
+  'utf8',
+).replace(/\r\n/g, '\n')
 
 let store: SqliteAdapter
 let app: Hono<Env>
@@ -145,7 +145,9 @@ describe('native events → notifications', () => {
   })
 
   test('Notification and Stop become needs_input / finished rows', async () => {
-    await post(native('Notification', { notification_type: 'permission_prompt', message: 'Allow Bash?' }))
+    await post(
+      native('Notification', { notification_type: 'permission_prompt', message: 'Allow Bash?' }),
+    )
     await post(native('Stop', { last_assistant_message: 'Done with S2' }))
     await post(native('PreToolUse', { tool_name: 'Read' }))
     const rows = await feed()

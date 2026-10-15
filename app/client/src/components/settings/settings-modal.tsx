@@ -8,6 +8,7 @@ import { IconSettings } from './icon-settings'
 import { GeneralSettings } from './general-settings'
 import { KeyboardSettings } from './keyboard-settings'
 import { FiltersTab } from './filters-tab'
+import { NotificationSettings } from './notification-settings'
 import { useUIStore } from '@/stores/ui-store'
 import { useFilterStore } from '@/stores/filter-store'
 import { useFilterDraftStore } from '@/stores/filter-draft-store'
@@ -110,6 +111,7 @@ export function SettingsModal() {
           <div className="px-6 pt-2">
             <TabsList>
               <TabsTrigger value="settings">Display</TabsTrigger>
+              <TabsTrigger value="notifications">Notifications</TabsTrigger>
               <TabsTrigger value="icons">Icons</TabsTrigger>
               <TabsTrigger value="filters">Filters</TabsTrigger>
               <TabsTrigger value="projects">Projects</TabsTrigger>
@@ -120,6 +122,12 @@ export function SettingsModal() {
           </div>
           <TabsContent value="settings" className="flex-1 min-h-0 overflow-y-auto px-6 pb-6 pt-4">
             <GeneralSettings />
+          </TabsContent>
+          <TabsContent
+            value="notifications"
+            className="flex-1 min-h-0 overflow-y-auto px-6 pb-6 pt-4"
+          >
+            <NotificationSettings />
           </TabsContent>
           <TabsContent
             value="icons"

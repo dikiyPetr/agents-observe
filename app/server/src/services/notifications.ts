@@ -48,10 +48,13 @@ const NEEDS_INPUT_TITLES: Record<string, string> = {
 
 function readFlowFileMeta(envelope: EventEnvelope): FlowFileMeta | null {
   const f = (envelope._meta as Record<string, unknown> | undefined)?.flowFile as
-    | Partial<FlowFileMeta>
-    | undefined
+    Partial<FlowFileMeta> | undefined
   if (!f || typeof f.slug !== 'string' || typeof f.content !== 'string') return null
-  return { slug: f.slug, absPath: typeof f.absPath === 'string' ? f.absPath : '', content: f.content }
+  return {
+    slug: f.slug,
+    absPath: typeof f.absPath === 'string' ? f.absPath : '',
+    content: f.content,
+  }
 }
 
 async function deriveNative(

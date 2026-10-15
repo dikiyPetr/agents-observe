@@ -5,7 +5,10 @@ import { parseFlow, parseJournalLine } from './parse'
 import { diffFlow } from './diff'
 
 // Normalize line endings: git may check the fixture out with CRLF on Windows.
-const EXAMPLE = readFileSync(join(__dirname, 'fixtures', 'example.md'), 'utf8').replace(/\r\n/g, '\n')
+const EXAMPLE = readFileSync(join(__dirname, 'fixtures', 'example.md'), 'utf8').replace(
+  /\r\n/g,
+  '\n',
+)
 
 describe('parseFlow', () => {
   test('parses the example flow', () => {
@@ -35,7 +38,8 @@ describe('parseFlow', () => {
   })
 
   test('works with CRLF line endings and English headings', () => {
-    const md = '---\r\ntitle: T\r\nstatus: done\r\n---\r\n## Steps\r\n- [x] S1 a\r\n## Journal\r\n- info — finished\r\n'
+    const md =
+      '---\r\ntitle: T\r\nstatus: done\r\n---\r\n## Steps\r\n- [x] S1 a\r\n## Journal\r\n- info — finished\r\n'
     const f = parseFlow(md)
     expect(f.status).toBe('done')
     expect(f.steps).toEqual([{ id: 'S1', state: 'done', text: 'a' }])
@@ -48,7 +52,11 @@ describe('parseFlow', () => {
     expect(f.title).toBe('Heading title')
     expect(f.status).toBe('active')
     expect(f.steps).toEqual([{ id: '#1', state: 'todo', text: 'no id' }])
-    expect(f.journal[0]).toMatchObject({ type: 'info', tags: ['risk'], text: 'just some text #risk' })
+    expect(f.journal[0]).toMatchObject({
+      type: 'info',
+      tags: ['risk'],
+      text: 'just some text #risk',
+    })
     expect(f.journal[1]).toMatchObject({ type: 'decision', level: 'normal', step: 'S1' })
     expect(f.errors).toHaveLength(5)
   })
@@ -112,7 +120,10 @@ describe('diffFlow', () => {
   test('dedup keys are stable across snapshots', () => {
     const next = parseFlow(EXAMPLE.replace('## Журнал\n', '## Журнал\n- info — hello\n'))
     const a = diffFlow(base, next)
-    const b = diffFlow(base, parseFlow(EXAMPLE.replace('## Журнал\n', '## Журнал\n- info — hello\n')))
+    const b = diffFlow(
+      base,
+      parseFlow(EXAMPLE.replace('## Журнал\n', '## Журнал\n- info — hello\n')),
+    )
     expect(a[0].dedupKey).toBe(b[0].dedupKey)
   })
 })

@@ -162,6 +162,11 @@ export type WSMessage =
   | { type: 'filter:updated'; filter: Filter }
   | { type: 'filter:deleted'; id: string }
   | { type: 'filter:bulk-changed' }
+  | { type: 'notification_v2'; data: import('./flow').AgentNotification }
+  | {
+      type: 'flow_update'
+      data: { projectId: number; slug: string; status: string; updatedTs: number }
+    }
 
 export type WSClientMessage = { type: 'subscribe'; sessionId: string } | { type: 'unsubscribe' }
 

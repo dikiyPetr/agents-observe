@@ -163,7 +163,11 @@ export function useRouteSync() {
   // session selection to resolve before opening a session-scoped modal.
   // Bypasses setEditingSessionId to avoid re-pushing the same URL.
   useEffect(() => {
-    if (!currentView) return
+    if (!currentView) {
+      // Back/forward away from `:project.flow@…` leaves no view — close the flow.
+      if (useUIStore.getState().openFlowSlug !== null) useUIStore.setState({ openFlowSlug: null })
+      return
+    }
     const parsed = parseView(currentView)
 
     if (parsed.scope === 'session') {
@@ -194,7 +198,14 @@ export function useRouteSync() {
       return
     }
 
-    // Future: parsed.scope === 'project' and parsed.scope === 'global'.
+    if (parsed.scope === 'project' && parsed.name === 'flow' && parsed.target) {
+      if (useUIStore.getState().openFlowSlug !== parsed.target) {
+        useUIStore.setState({ openFlowSlug: parsed.target })
+      }
+      return
+    }
+
+    // Future: other parsed.scope === 'project' views and parsed.scope === 'global'.
     // For now, unknown scope/view is logged so it doesn't silently rot.
     console.warn(
       `[route-sync] Deep link :${currentView} (${parsed.scope}.${parsed.name}) not wired up yet — stripping.`,

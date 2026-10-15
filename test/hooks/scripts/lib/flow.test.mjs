@@ -109,8 +109,8 @@ describe('claude-code.buildHookEvent flow attachment', () => {
     const log = makeLog()
     expect(buildHookEvent(config, log, post('Read', abs)).envelope._meta?.flowFile).toBeUndefined()
     expect(
-      buildHookEvent(config, log, post('Edit', abs, { hook_event_name: 'PreToolUse' })).envelope._meta
-        ?.flowFile,
+      buildHookEvent(config, log, post('Edit', abs, { hook_event_name: 'PreToolUse' })).envelope
+        ._meta?.flowFile,
     ).toBeUndefined()
     expect(
       buildHookEvent(config, log, post('Edit', join(dir, 'README.md'))).envelope._meta?.flowFile,

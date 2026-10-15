@@ -260,6 +260,10 @@ interface UIState {
   currentView: string | null
   setCurrentView: (view: string | null) => void
 
+  // Flow file open in the main panel (project page only) — `:project.flow@<slug>`.
+  openFlowSlug: string | null
+  openFlow: (slug: string | null) => void
+
   // The session id or project slug from the URL that failed to resolve to a
   // real row. Held (not just logged) so MainPanel can render a "not found"
   // state instead of a blank panel. Compared against the current target, so a
@@ -462,12 +466,16 @@ function computeViewFromState(state: {
   editingSessionId: string | null
   editingSessionTab: 'details' | 'stats' | 'labels'
   selectedSessionId: string | null
+  openFlowSlug: string | null
 }): string | null {
   if (state.editingSessionId !== null) {
     const tab = state.editingSessionTab
     return state.editingSessionId === state.selectedSessionId
       ? `session.${tab}`
       : `session.${tab}@${state.editingSessionId}`
+  }
+  if (state.openFlowSlug !== null && state.selectedSessionId === null) {
+    return `project.flow@${state.openFlowSlug}`
   }
   return null
 }
@@ -500,6 +508,7 @@ export const useUIStore = create<UIState>((set, get) => ({
       selectedProjectId: id,
       selectedProjectSlug: newSlug,
       selectedSessionId: null,
+      openFlowSlug: null,
       selectedAgentIds: [],
       expandedEventIds: new Set(),
       lastExpandedEventId: null,
@@ -535,6 +544,7 @@ export const useUIStore = create<UIState>((set, get) => ({
     const exitingRewind = state.rewindMode && state.selectedSessionId !== id
     set({
       selectedSessionId: id,
+      openFlowSlug: null,
       selectedAgentIds: [],
       expandedEventIds: new Set(),
       lastExpandedEventId: null,
@@ -572,6 +582,7 @@ export const useUIStore = create<UIState>((set, get) => ({
       selectedProjectId: projectId,
       selectedProjectSlug: newSlug,
       selectedSessionId: sessionId,
+      openFlowSlug: null,
       selectedAgentIds: [],
       expandedEventIds: new Set(),
       lastExpandedEventId: null,
@@ -687,6 +698,15 @@ export const useUIStore = create<UIState>((set, get) => ({
   setCurrentView: (view) => {
     set({ currentView: view })
     const state = get()
+    updateHash(state.selectedProjectSlug, state.selectedSessionId, view)
+  },
+
+  openFlowSlug: null,
+  openFlow: (slug) => {
+    set({ openFlowSlug: slug })
+    const state = get()
+    const view = computeViewFromState(state)
+    if (state.currentView !== view) set({ currentView: view })
     updateHash(state.selectedProjectSlug, state.selectedSessionId, view)
   },
 

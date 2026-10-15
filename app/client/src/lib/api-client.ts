@@ -8,6 +8,7 @@ import type {
   NotificationPayload,
   Filter,
 } from '@/types'
+import type { AgentNotification, FlowDetail, FlowSummary } from '@/types/flow'
 
 /**
  * Rich error thrown by all api.* methods on failure. Carries the HTTP status,
@@ -167,6 +168,11 @@ export const api = {
       body: JSON.stringify(data),
     }),
   getChangelog: () => fetchJson<{ markdown: string }>('/changelog'),
+  getFlows: (projectId: number) => fetchJson<FlowSummary[]>(`/projects/${projectId}/flows`),
+  getFlow: (projectId: number, slug: string) =>
+    fetchJson<FlowDetail>(`/projects/${projectId}/flows/${encodeURIComponent(slug)}`),
+  getNotificationFeed: (since = 0, limit = 200) =>
+    fetchJson<AgentNotification[]>(`/notifications/feed?since=${since}&limit=${limit}`),
   getDbStats: () =>
     fetchJson<{ dbPath: string; sizeBytes: number; sessionCount: number; eventCount: number }>(
       '/db/stats',

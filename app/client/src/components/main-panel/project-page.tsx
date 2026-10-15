@@ -4,6 +4,7 @@ import { useSessions } from '@/hooks/use-sessions'
 import { useProjects } from '@/hooks/use-projects'
 import { useUIStore } from '@/stores/ui-store'
 import { SessionList } from './session-list'
+import { FlowsSection } from '@/components/flow/flows-section'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 
 export function ProjectPage() {
@@ -60,6 +61,7 @@ export function ProjectPage() {
         </Tooltip>
       </div>
       <div className="flex-1 overflow-y-auto">
+        {selectedProjectId != null && <FlowsSection projectId={selectedProjectId} />}
         {isLoading && (
           <div className="flex items-center justify-center h-32 text-xs text-muted-foreground">
             Loading...

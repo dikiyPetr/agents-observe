@@ -10,10 +10,12 @@ import { ActivityTimeline } from '@/components/timeline/activity-timeline'
 import { EventStream } from '@/components/event-stream/event-stream'
 import { HomePage } from './home-page'
 import { ProjectPage } from './project-page'
+import { FlowView } from '@/components/flow/flow-view'
 import { useRegionShortcuts } from '@/hooks/use-region-shortcuts'
 
 export function MainPanel() {
-  const { selectedProjectId, selectedProjectSlug, selectedSessionId, routeError } = useUIStore()
+  const { selectedProjectId, selectedProjectSlug, selectedSessionId, routeError, openFlowSlug } =
+    useUIStore()
 
   // A session route renders as soon as we know the session id — even with no
   // resolved (or no existing) project. Unassigned sessions have no project at
@@ -39,6 +41,10 @@ export function MainPanel() {
 
   if (!selectedProjectId) {
     return <HomePage />
+  }
+
+  if (openFlowSlug) {
+    return <FlowView key={openFlowSlug} projectId={selectedProjectId} slug={openFlowSlug} />
   }
 
   return <ProjectPage />

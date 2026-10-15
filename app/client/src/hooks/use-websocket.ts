@@ -5,6 +5,7 @@ import type { WSMessage, WSClientMessage, ParsedEvent, Session, RecentSession } 
 import { pushNotification, clearNotification } from '@/components/sidebar/notification-indicator'
 import { useUIStore } from '@/stores/ui-store'
 import { useFilterStore } from '@/stores/filter-store'
+import { handleIncomingAgentNotification } from '@/hooks/use-agent-notifications'
 
 /** Patch the ['sessions', *] and ['recent-sessions', *] query caches so
  *  that any row matching sessionId with status='ended' flips to 'active'.
@@ -198,6 +199,12 @@ export function useWebSocket(sessionId: string | null) {
         useFilterStore.getState().removeFromBroadcast(msg.id)
       } else if (msg.type === 'filter:bulk-changed') {
         void useFilterStore.getState().bulkChangedFromBroadcast()
+      } else if (msg.type === 'notification_v2') {
+        handleIncomingAgentNotification(msg.data, queryClient)
+      } else if (msg.type === 'flow_update') {
+        const { projectId, slug } = msg.data
+        queryClient.invalidateQueries({ queryKey: ['flows', projectId] })
+        queryClient.invalidateQueries({ queryKey: ['flow', projectId, slug] })
       }
     },
     [queryClient],
