@@ -203,6 +203,13 @@ export function getConfig(overrides = {}) {
      */
     notificationOnEvents,
 
+    /**
+     * Clone of agents-observe that local/dev auto-start runs start.mjs from
+     * (needs its npm dependencies). Defaults to installDir; the plugin cache
+     * copy has no dependencies, so plugin installs set AGENTS_OBSERVE_SERVER_DIR.
+     */
+    serverDir: resolve(overrides.serverDir || process.env.AGENTS_OBSERVE_SERVER_DIR || installDir),
+
     cliPath: resolve(installDir, './hooks/scripts/observe_cli.mjs'),
     logLevel: (overrides.logLevel || process.env.AGENTS_OBSERVE_LOG_LEVEL || 'warn').toLowerCase(),
     logsDir: resolve(installDir, process.env.AGENTS_OBSERVE_LOGS_DIR || `${localDataRootDir}/logs`),

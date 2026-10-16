@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 // Generates hooks/scripts/lib/flow-parse.gen.mjs from the server's flow parser,
 // so the hook-side lint uses the exact parser the dashboard uses. Hooks run on
 // plain Node (no TypeScript), hence the type-stripped copy.

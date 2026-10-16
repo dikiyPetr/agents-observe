@@ -5,6 +5,7 @@
 import { postJson, getJson } from './http.mjs'
 import { handleCallbackRequests } from './callbacks.mjs'
 import { startServer } from './docker.mjs'
+import { startLocalServer } from './local-server.mjs'
 import { getAgentClass, getAgentLib } from './agents/index.mjs'
 
 // -- Helpers ----------------------------------------------------------
@@ -234,27 +235,35 @@ export async function hookAutostartCommand(config, log) {
       return
     }
 
-    // Auto-start only knows how to launch the Docker container. In local/dev
-    // runtimes the server is started by hand (start.mjs), so just say how.
+    // local/dev runtimes: launch start.mjs from AGENTS_OBSERVE_SERVER_DIR (a
+    // clone with deps installed) detached; if that is not possible, say how.
     if (config.runtime !== 'docker') {
-      log.warn(`Server not running (runtime=${config.runtime}) — skipping docker auto-start`)
-      outputClaudeSystemMessage(
-        `Agents Observe: server is not running at ${config.baseOrigin}. ` +
-          `Start it with: node ${config.installDir}/start.mjs`,
-      )
-      return
+      const problem = startLocalServer(config, log, process.env)
+      if (problem) {
+        log.warn(`Server not running (runtime=${config.runtime}) — cannot auto-start: ${problem}`)
+        outputClaudeSystemMessage(
+          `Agents Observe: server is not running at ${config.baseOrigin} (${problem}). ` +
+            `Start it with: node ${config.serverDir}/start.mjs, or set AGENTS_OBSERVE_SERVER_DIR ` +
+            `to a clone of agents-observe with dependencies installed.`,
+        )
+        return
+      }
+    } else {
+      log.warn('Server not running, auto-starting...')
     }
-
-    log.warn('Server not running, auto-starting...')
 
     // Start the server in the background — don't await it directly because
     // docker pull + health loop can exceed the timeout. Instead, poll for
     // health independently so we detect the server as soon as it's up.
+    // (The local server is already spawned; only its health is polled.)
     let startFinished = false
-    const startPromise = startServer(config, log).then((port) => {
-      startFinished = true
-      return port
-    })
+    const startPromise =
+      config.runtime === 'docker'
+        ? startServer(config, log).then((port) => {
+            startFinished = true
+            return port
+          })
+        : null
 
     // Poll for health until the server is up or we hit the timeout
     const deadline = Date.now() + config.hookStartupTimeout
@@ -297,7 +306,8 @@ export async function hookAutostartCommand(config, log) {
       }
     }
 
-    const dashboardUrl = `http://127.0.0.1:${actualPort}`
+    // In dev the UI is served by vite on its own port.
+    const dashboardUrl = `http://127.0.0.1:${config.isDevRuntime ? config.clientPort : actualPort}`
     outputClaudeSystemMessage(`Agents Observe: server started. Dashboard: ${dashboardUrl}`)
   } catch (err) {
     log.error(`hook-autostart failed: ${err.message}`)
