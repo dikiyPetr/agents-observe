@@ -92,6 +92,7 @@ Controls where and how the server runs.
 | --- | --- | --- |
 | `AGENTS_OBSERVE_RUNTIME` | `docker` | How to run the server: `docker` (container), `local` (node subprocess), `dev` (vite dev server + local node). |
 | `AGENTS_OBSERVE_SERVER_DIR` | plugin install dir | Clone of agents-observe (with npm dependencies installed) that SessionStart auto-start runs `start.mjs --skip-install --build-if-stale` from in `local`/`dev` runtimes. Needed for plugin installs: the plugin cache copy has no dependencies. The detached server logs to `<logs dir>/server.log` and stops by itself after `AGENTS_OBSERVE_SHUTDOWN_DELAY_MS` with no sessions or tabs. |
+| `AGENTS_OBSERVE_TRAY` | `1` on Windows | Auto-started local server shows a tray icon (`hooks/scripts/tray.ps1`): green when up, double-click opens the dashboard, menu has *Stop server*. `0` disables it. |
 | `AGENTS_OBSERVE_RUNTIME_DEV` | *(set by CLI)* | Internal flag (`1` or empty) so the server knows it's running under `dev`. Don't set this manually. |
 | `AGENTS_OBSERVE_DEV_CLIENT_PORT` | `5174` | Port the Vite dev server listens on in `dev` runtime. |
 | `AGENTS_OBSERVE_DOCKER_IMAGE` | `ghcr.io/simple10/agents-observe:v<version>` | Override the Docker image tag. Useful for testing local builds. |

@@ -29,11 +29,20 @@ const isDev = config.isDevRuntime
 const skipInstall = process.argv.includes('--skip-install')
 // npm/npx are .cmd shims on Windows and can't be spawned without a shell
 const shell = process.platform === 'win32'
+// When auto-started in the background there is no console: without this every
+// cmd.exe shim opens its own window, and closing it kills the server.
+const windowsHide = true
 
 function run(cmd, args, cwd, env = {}) {
   const rel = cwd.replace(config.installDir + '/', '') || '.'
   console.log(`\n> ${cmd} ${args.join(' ')}  (in ${rel})`)
-  execFileSync(cmd, args, { cwd, shell, stdio: 'inherit', env: { ...process.env, ...env } })
+  execFileSync(cmd, args, {
+    cwd,
+    shell,
+    windowsHide,
+    stdio: 'inherit',
+    env: { ...process.env, ...env },
+  })
 }
 
 // 1. Install dependencies
@@ -92,6 +101,7 @@ if (isDev) {
   const server = spawn('npm', ['run', 'dev'], {
     cwd: serverDir,
     shell,
+    windowsHide,
     stdio: 'inherit',
     env: { ...process.env, ...serverEnv },
   })
@@ -99,6 +109,7 @@ if (isDev) {
   const client = spawn('npm', ['run', 'dev'], {
     cwd: clientDir,
     shell,
+    windowsHide,
     stdio: 'inherit',
     env: { ...process.env, ...getClientEnv(config) },
   })
@@ -125,6 +136,7 @@ if (isDev) {
   const server = spawn('npx', ['tsx', 'src/index.ts'], {
     cwd: serverDir,
     shell,
+    windowsHide,
     stdio: 'inherit',
     env: { ...process.env, ...serverEnv },
   })
@@ -141,4 +153,29 @@ if (isDev) {
     removeServerPortFile(config)
     server.kill('SIGTERM')
   })
+}
+
+// 5. Windows tray icon (--tray, passed by the SessionStart auto-start): open the
+// dashboard / stop the server. A child of this process, so it goes away with it.
+if (process.argv.includes('--tray') && process.platform === 'win32') {
+  const tray = spawn(
+    'powershell.exe',
+    [
+      '-NoProfile',
+      '-ExecutionPolicy',
+      'Bypass',
+      '-WindowStyle',
+      'Hidden',
+      '-File',
+      resolve(config.installDir, 'hooks/scripts/tray.ps1'),
+      '-DashboardUrl',
+      `http://localhost:${isDev ? config.clientPort : config.serverPort}`,
+      '-HealthUrl',
+      `${config.apiBaseUrl}/health`,
+      '-ServerPid',
+      String(process.pid),
+    ],
+    { windowsHide: true, stdio: 'ignore' },
+  )
+  tray.on('error', (err) => console.error(`Tray icon failed: ${err.message}`))
 }

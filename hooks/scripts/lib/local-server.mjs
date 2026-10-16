@@ -30,7 +30,13 @@ export function startLocalServer(config, log, env) {
   const out = openSync(join(config.logsDir, 'server.log'), 'a')
   const child = spawn(
     process.execPath,
-    [join(config.serverDir, 'start.mjs'), '--skip-install', '--build-if-stale'],
+    [
+      join(config.serverDir, 'start.mjs'),
+      '--skip-install',
+      '--build-if-stale',
+      // start.mjs owns the tray icon: it lives exactly as long as the server.
+      ...(config.trayEnabled ? ['--tray'] : []),
+    ],
     {
       cwd: config.serverDir,
       detached: true,
