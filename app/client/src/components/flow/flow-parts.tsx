@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils'
 import type { FlowStatus, StepState } from '@/types/flow'
 
 const STATUS_STYLES: Record<FlowStatus, string> = {
+  review: 'bg-amber-500/15 text-amber-700 dark:text-amber-300',
   active: 'bg-sky-500/15 text-sky-700 dark:text-sky-300',
   blocked: 'bg-red-500/15 text-red-700 dark:text-red-300',
   done: 'bg-green-500/15 text-green-700 dark:text-green-300',

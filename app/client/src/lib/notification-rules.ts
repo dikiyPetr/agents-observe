@@ -22,6 +22,7 @@ export interface NotificationRules {
 
 export const NOTIFICATION_KINDS: { kind: NotificationKind; label: string; hint: string }[] = [
   { kind: 'needs_input', label: 'Needs input', hint: 'Permission prompt or question' },
+  { kind: 'flow_review', label: 'Plan review', hint: 'Plan written, awaiting your approval' },
   { kind: 'blocked', label: 'Blocked', hint: 'Agent cannot continue' },
   { kind: 'deviation', label: 'Deviation', hint: 'Plan changed' },
   { kind: 'decision', label: 'Decision', hint: 'Autonomous decision' },
@@ -39,6 +40,7 @@ export const DEFAULT_NOTIFICATION_RULES: NotificationRules = {
   sound: false,
   thresholds: {
     needs_input: 'low',
+    flow_review: 'low',
     blocked: 'low',
     flow_blocked: 'low',
     error: 'low',

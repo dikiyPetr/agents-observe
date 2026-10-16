@@ -6,8 +6,9 @@ import { tmpdir } from 'node:os'
 import {
   matchFlowPath,
   readFrontmatter,
-  listActiveFlows,
-  buildFlowReminder,
+  listFlows,
+  resolveFlowDir,
+  samePath,
   MAX_FLOW_FILE_BYTES,
 } from '../../../../hooks/scripts/lib/flow.mjs'
 import { buildHookEvent } from '../../../../hooks/scripts/lib/agents/claude-code.mjs'
@@ -49,7 +50,7 @@ describe('readFrontmatter', () => {
   })
 })
 
-describe('listActiveFlows / buildFlowReminder', () => {
+describe('listFlows / resolveFlowDir', () => {
   let dir
   beforeEach(() => {
     dir = join(tmpdir(), `flow-${Date.now()}-${Math.random()}`)
@@ -57,18 +58,29 @@ describe('listActiveFlows / buildFlowReminder', () => {
   })
   afterEach(() => rmSync(dir, { recursive: true, force: true }))
 
-  it('lists non-done flows only', () => {
+  it('lists flows of any status, skips non-flow files', () => {
     writeFileSync(join(dir, '.flow', 'a.md'), FLOW)
     writeFileSync(join(dir, '.flow', 'b.md'), FLOW.replace('status: active', 'status: done'))
+    writeFileSync(join(dir, '.flow', 'notes.md'), '# just notes')
     writeFileSync(join(dir, '.flow', 'notes.txt'), 'ignored')
-    const flows = listActiveFlows(dir)
-    expect(flows).toEqual([{ relPath: '.flow/a.md', title: 'Port inventory', status: 'active' }])
-    expect(buildFlowReminder(flows)).toContain('.flow/a.md — Port inventory (status: active)')
+    const flows = listFlows(join(dir, '.flow'))
+    expect(flows.map((f) => [f.name, f.status, f.done, f.total]).sort()).toEqual([
+      ['a.md', 'active', 0, 1],
+      ['b.md', 'done', 0, 1],
+    ])
+    expect(listFlows(join(dir, 'missing'))).toEqual([])
   })
 
-  it('returns [] / null when there is no .flow dir', () => {
-    expect(listActiveFlows(join(dir, 'missing'))).toEqual([])
-    expect(buildFlowReminder([])).toBeNull()
+  it('nearest .flow, else the git root (dir or worktree file), never home', () => {
+    const nested = join(dir, 'pkg', 'web')
+    mkdirSync(nested, { recursive: true })
+    expect(samePath(resolveFlowDir(nested), join(dir, '.flow'))).toBe(true)
+
+    rmSync(join(dir, '.flow'), { recursive: true })
+    writeFileSync(join(dir, '.git'), 'gitdir: elsewhere')
+    expect(samePath(resolveFlowDir(nested), join(dir, '.flow'))).toBe(true)
+    expect(resolveFlowDir(nested, { homeDir: dir })).toBeNull()
+    expect(resolveFlowDir(null)).toBeNull()
   })
 })
 

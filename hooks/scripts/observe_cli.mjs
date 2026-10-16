@@ -13,6 +13,7 @@ import { createLogger } from './lib/logger.mjs'
 import { startServer, stopServer } from './lib/docker.mjs'
 import { removeDatabase } from './lib/fs.mjs'
 import { hookCommand, hookSyncCommand, hookAutostartCommand } from './lib/hooks.mjs'
+import { hookContextCommand } from './lib/flow-context.mjs'
 
 const cliArgs = parseArgs(process.argv.slice(2))
 const config = getConfig(cliArgs)
@@ -24,6 +25,7 @@ switch (cliArgs.commands[0] || 'help') {
     console.log('  hook:            Send an event (fire-and-forget)')
     console.log('  hook-sync:       Send an event and return systemMessage JSON')
     console.log('  hook-autostart:  Like hook-sync, but auto-starts server if unreachable')
+    console.log('  hook-context:    Flow rules/checks as hook context JSON (no network)')
     console.log('  health:          Check the server health')
     console.log('  start:           Start the server')
     console.log('  stop:            Stop the server')
@@ -41,6 +43,9 @@ switch (cliArgs.commands[0] || 'help') {
     break
   case 'hook-autostart':
     hookAutostartCommand(config, log)
+    break
+  case 'hook-context':
+    hookContextCommand(config, log)
     break
   case 'health':
     healthCommand()

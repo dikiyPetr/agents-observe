@@ -22,6 +22,7 @@ export async function requestSystemNotificationPermission(): Promise<SystemPermi
 
 const ICONS: Partial<Record<AgentNotification['kind'], string>> = {
   needs_input: '✋',
+  flow_review: '📝',
   blocked: '⛔',
   flow_blocked: '⛔',
   error: '❌',

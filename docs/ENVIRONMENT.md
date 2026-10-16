@@ -71,6 +71,19 @@ In `docker` runtime the CLI populates these from the resolved host paths and mou
 
 ---
 
+## Flow tracking
+
+The synchronous `hook-context` hook adds the flow rules to the agent's context and checks
+`.flow/*.md` files (see [FLOW-SETUP.md](../FLOW-SETUP.md)). No network; per-session state lives in
+`<data dir>/flow-state/` (files older than 7 days are removed).
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `AGENTS_OBSERVE_FLOW` | `on` | `off` (or `0`/`false`/`no`) disables flow tracking: no rules, checks or auto-allow of `.flow/` writes. Events and the dashboard are unaffected. |
+| `AGENTS_OBSERVE_FLOW_REMINDER` | — | Deprecated: `0` means `AGENTS_OBSERVE_FLOW=off`. |
+
+---
+
 ## Docker / runtime selection
 
 Controls where and how the server runs.

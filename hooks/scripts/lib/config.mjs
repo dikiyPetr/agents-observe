@@ -248,8 +248,17 @@ export function getConfig(overrides = {}) {
     /** When true, the server exposes /api/sessions/:id/transcript-stats and (in docker mode) the container bind-mounts each agent class's session dir read-only. On by default; set to '0' to disable. */
     transcriptStatsEnabled: process.env.AGENTS_OBSERVE_TRANSCRIPT_STATS !== '0',
 
-    /** When true, SessionStart injects a reminder about active `.flow/*.md` files into the agent's context. Set to '0' to disable. */
-    flowReminderEnabled: process.env.AGENTS_OBSERVE_FLOW_REMINDER !== '0',
+    /**
+     * Flow tracking: `hook-context` adds the flow rules to the agent's context
+     * and checks `.flow/*.md` files. AGENTS_OBSERVE_FLOW=off disables it.
+     * AGENTS_OBSERVE_FLOW_REMINDER=0 is the deprecated spelling of off.
+     */
+    flowEnabled:
+      !['0', 'off', 'false', 'no'].includes(
+        (process.env.AGENTS_OBSERVE_FLOW ?? '').trim().toLowerCase(),
+      ) && process.env.AGENTS_OBSERVE_FLOW_REMINDER !== '0',
+    /** Claude Code project dir (set for hooks); fallback root for `.flow/` outside git. */
+    claudeProjectDir: process.env.CLAUDE_PROJECT_DIR || null,
 
     /**
      * Host paths to bind-mount when transcript stats are enabled. One

@@ -16,7 +16,16 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/observe_cli.mjs hook-autostart"
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/scripts/observe_cli.mjs\" hook-autostart"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/scripts/observe_cli.mjs\" hook-context",
+            "timeout": 10
           }
         ]
       }
@@ -39,6 +48,15 @@
             "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/scripts/observe_cli.mjs\" hook",
             "async": true
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/scripts/observe_cli.mjs\" hook-context",
+            "timeout": 10
           }
         ]
       }
@@ -64,6 +82,16 @@
             "async": true
           }
         ]
+      },
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/scripts/observe_cli.mjs\" hook-context",
+            "timeout": 10
+          }
+        ]
       }
     ],
     "PostToolUse": [
@@ -73,6 +101,16 @@
             "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/scripts/observe_cli.mjs\" hook",
             "async": true
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit|MultiEdit|ExitPlanMode",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/scripts/observe_cli.mjs\" hook-context",
+            "timeout": 10
           }
         ]
       }
@@ -130,6 +168,15 @@
             "async": true
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/scripts/observe_cli.mjs\" hook-context",
+            "timeout": 10
+          }
+        ]
       }
     ],
     "StopFailure": [
@@ -150,6 +197,15 @@
             "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/scripts/observe_cli.mjs\" hook",
             "async": true
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/scripts/observe_cli.mjs\" hook-context",
+            "timeout": 10
           }
         ]
       }

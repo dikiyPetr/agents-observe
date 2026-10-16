@@ -6,7 +6,6 @@ import { postJson, getJson } from './http.mjs'
 import { handleCallbackRequests } from './callbacks.mjs'
 import { startServer } from './docker.mjs'
 import { getAgentClass, getAgentLib } from './agents/index.mjs'
-import { listActiveFlows, buildFlowReminder } from './flow.mjs'
 
 // -- Helpers ----------------------------------------------------------
 
@@ -78,17 +77,6 @@ function outputClaudeSystemMessage(message, additionalContext = null) {
     out.hookSpecificOutput = { hookEventName: 'SessionStart', additionalContext }
   }
   process.stdout.write(JSON.stringify(out) + '\n')
-}
-
-/** SessionStart reminder about active flow files in the session's cwd, or null. */
-function flowReminderFor(config, log, cwd) {
-  if (!config.flowReminderEnabled) return null
-  try {
-    return buildFlowReminder(listActiveFlows(cwd))
-  } catch (err) {
-    log.warn(`Flow reminder failed: ${err.message}`)
-    return null
-  }
 }
 
 /**
@@ -230,11 +218,10 @@ export async function hookAutostartCommand(config, log) {
 
   try {
     const { result, envelope } = await sendHookSync(config, log)
-    const flowContext = flowReminderFor(config, log, envelope?.cwd)
 
     // Server is reachable — handle normally
     if (result && result.status !== 0) {
-      handleSuccessResponse(result, config, log, flowContext)
+      handleSuccessResponse(result, config, log)
       return
     }
 
@@ -243,7 +230,6 @@ export async function hookAutostartCommand(config, log) {
       log.warn('Server unreachable at custom API URL — skipping auto-start')
       outputClaudeSystemMessage(
         `Agents Observe: server unreachable at ${config.apiBaseUrl}. Run /observe status for help.`,
-        flowContext,
       )
       return
     }
@@ -255,7 +241,6 @@ export async function hookAutostartCommand(config, log) {
       outputClaudeSystemMessage(
         `Agents Observe: server is not running at ${config.baseOrigin}. ` +
           `Start it with: node ${config.installDir}/start.mjs`,
-        flowContext,
       )
       return
     }
@@ -292,7 +277,6 @@ export async function hookAutostartCommand(config, log) {
         `Agents Observe: server is starting (timed out after ${
           config.hookStartupTimeout / 1000
         }s). Run /observe status to check.`,
-        flowContext,
       )
       return
     }
@@ -314,10 +298,7 @@ export async function hookAutostartCommand(config, log) {
     }
 
     const dashboardUrl = `http://127.0.0.1:${actualPort}`
-    outputClaudeSystemMessage(
-      `Agents Observe: server started. Dashboard: ${dashboardUrl}`,
-      flowContext,
-    )
+    outputClaudeSystemMessage(`Agents Observe: server started. Dashboard: ${dashboardUrl}`)
   } catch (err) {
     log.error(`hook-autostart failed: ${err.message}`)
     outputClaudeSystemMessage(`Agents Observe: internal error. Run /observe status for help.`)

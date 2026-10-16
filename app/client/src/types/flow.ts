@@ -1,7 +1,7 @@
 // Mirrors app/server/src/flow/parse.ts and storage/types.ts (StoredFlow,
 // StoredNotification). Flow format: skills/flow/SKILL.md.
 
-export type FlowStatus = 'active' | 'blocked' | 'done'
+export type FlowStatus = 'review' | 'active' | 'blocked' | 'done'
 export type StepState = 'todo' | 'doing' | 'done' | 'skipped' | 'blocked'
 export type JournalType = 'plan' | 'step' | 'deviation' | 'decision' | 'blocked' | 'info'
 export type NotificationLevel = 'low' | 'normal' | 'high'
@@ -28,6 +28,8 @@ export interface ParsedFlow {
   title: string
   status: FlowStatus
   updated: string | null
+  /** Plan document this flow mirrors (`source:`), if any. */
+  source: string | null
   parent: string | null
   parentStep: string | null
   goal: string
@@ -68,6 +70,7 @@ export interface FlowDetail extends FlowSummary {
 /** Kinds produced by the server's notifications service. */
 export type NotificationKind =
   | JournalType
+  | 'flow_review'
   | 'flow_done'
   | 'flow_blocked'
   | 'needs_input'
