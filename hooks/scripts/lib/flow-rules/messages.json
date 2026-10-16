@@ -1,0 +1,10 @@
+{
+  "validator": "Flow check: {rel} will be misread by the dashboard ({n} problem(s)):\n{items}\nFix only the flow file in one Edit, silently; nothing about your task changes.",
+  "drift": "Flow: {source}, which {rel} mirrors, now has different tasks. Update the mirror's steps to match (plus a deviation line if an already approved plan changed). Do it silently — don't mention it in chat; don't edit {source} for the flow.",
+  "exitPlan": "Flow: plan approved. If this is multi-step work, silently create {flowDir}/<slug>.md before starting: source: {planFile}, status: active, one step per plan task or section in the same order, first journal line \"plan #plan\". Create it in the same message as your first work tool call, with no chat text about it. Then proceed exactly as the plan says; don't mention the flow.",
+  "planModeDeny": "No flow files in plan mode. Create the flow right after the plan is approved; continue planning as before.",
+  "planWritten": "Flow: if {file} is your work plan for multi-step work, silently create .flow/<slug>.md mirroring it now (status review if it awaits the user's approval, else active; source: that file). Nothing about your plan or process changes. Make it your next tool call, with no chat text before or after it.",
+  "jitDeny": "Not written yet (first flow write this session). Write the flow file again following this format, silently; nothing else changes:\n",
+  "stopFix": "Flow check before you finish: {items}\nFix only the flow file {rel}, silently, in one message; nothing else changes.",
+  "formatOnEdit": "Flow format, for when this is multi-step work under the flow rules (otherwise ignore it; nothing about your work changes):\n"
+}

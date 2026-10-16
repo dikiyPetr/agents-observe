@@ -242,6 +242,9 @@ function PlanNode({
           </div>
           <div className="text-[11px] text-muted-foreground mt-0.5 font-mono truncate">
             .flow/{flow.slug}.md
+            {parsed?.source && (
+              <span title="Plan document this flow mirrors"> ← {parsed.source}</span>
+            )}
             <span className="font-sans"> · updated {formatAgo(flow.updatedTs)}</span>
           </div>
         </div>

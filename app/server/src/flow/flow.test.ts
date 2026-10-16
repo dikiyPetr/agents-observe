@@ -89,6 +89,21 @@ describe('parseFlow', () => {
   })
 })
 
+describe('parseFlow review + source', () => {
+  test('review is a known status and source is kept', () => {
+    const f = parseFlow(
+      '---\ntitle: Tags\nstatus: review\nsource: docs/design/tags.md\n---\n## Steps\n- [ ] S1 a\n',
+    )
+    expect(f.status).toBe('review')
+    expect(f.source).toBe('docs/design/tags.md')
+    expect(f.errors).toEqual([])
+  })
+
+  test('no source → null', () => {
+    expect(parseFlow(EXAMPLE).source).toBeNull()
+  })
+})
+
 describe('parseJournalLine', () => {
   test('defaults blocked to high level and collects tags from text', () => {
     const { entry, ok } = parseJournalLine('09:15 blocked S5 — нет SaveGame #risk')
@@ -151,6 +166,35 @@ describe('diffFlow', () => {
     expect(done).toEqual([expect.objectContaining({ kind: 'flow_done', level: 'normal' })])
     const blocked = diffFlow(base, parseFlow(EXAMPLE.replace('status: active', 'status: blocked')))
     expect(blocked).toEqual([expect.objectContaining({ kind: 'flow_blocked', level: 'high' })])
+  })
+
+  test('[x] and its step line in separate snapshots share one dedup key', () => {
+    const marked = parseFlow(EXAMPLE.replace('- [ ] S3', '- [x] S3'))
+    const logged = parseFlow(
+      EXAMPLE.replace('- [ ] S3', '- [x] S3').replace(
+        '- 14:25 step S1',
+        '- 14:50 step S3 — UI готов\n- 14:25 step S1',
+      ),
+    )
+    const [byMarker] = diffFlow(base, marked)
+    const [byJournal] = diffFlow(marked, logged)
+    expect(byMarker.dedupKey).toBe('step:S3:done')
+    expect(byJournal.dedupKey).toBe('step:S3:done')
+  })
+
+  test('review: first sighting asks for approval, approval itself is silent', () => {
+    const review = parseFlow(EXAMPLE.replace('status: active', 'status: review'))
+    expect(diffFlow(null, review)).toEqual([
+      expect.objectContaining({
+        kind: 'flow_review',
+        level: 'high',
+        title: 'Plan awaiting approval',
+      }),
+    ])
+    expect(diffFlow(review, base)).toEqual([])
+    expect(diffFlow(base, review)).toEqual([
+      expect.objectContaining({ kind: 'flow_review', level: 'high' }),
+    ])
   })
 
   test('dedup keys are stable across snapshots', () => {

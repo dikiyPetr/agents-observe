@@ -1,9 +1,9 @@
 // hooks/scripts/lib/flow.mjs
-// Helpers for flow files (`<repo>/.flow/<slug>.md`) — see skills/flow/SKILL.md.
+// Helpers for flow files (`<repo>/.flow/<slug>.md`). Format: lib/flow-rules/format.md.
 // No dependencies - uses only Node.js built-ins.
 
-import { readFileSync, readdirSync, statSync } from 'node:fs'
-import { join } from 'node:path'
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
+import { dirname, join, parse as parsePath, resolve } from 'node:path'
 
 /** Flow files bigger than this are not attached to events. */
 export const MAX_FLOW_FILE_BYTES = 256 * 1024
@@ -51,37 +51,79 @@ export function readFrontmatter(content) {
 }
 
 /**
- * List flows under `<cwd>/.flow` whose status is not `done`.
- * Returns [{ relPath, title, status }]. Never throws.
+ * The `.flow` directory for a session's cwd: the nearest ancestor that already
+ * has `.flow/`, else the git root (`.git` dir or file, so worktrees work), else
+ * `projectDir`, else cwd. Returns null when that would land in the home dir or
+ * a filesystem root. Never throws.
  */
-export function listActiveFlows(cwd) {
-  if (!cwd) return []
-  const dir = join(cwd, '.flow')
+export function resolveFlowDir(cwd, { homeDir, projectDir } = {}) {
+  if (!cwd) return null
+  try {
+    let dir = resolve(cwd)
+    let gitRoot = null
+    for (;;) {
+      const flowDir = join(dir, '.flow')
+      if (existsSync(flowDir) && statSync(flowDir).isDirectory())
+        return guardFlowDir(flowDir, homeDir)
+      if (!gitRoot && existsSync(join(dir, '.git'))) gitRoot = dir
+      const up = dirname(dir)
+      if (up === dir) break
+      dir = up
+    }
+    return guardFlowDir(join(gitRoot || projectDir || cwd, '.flow'), homeDir)
+  } catch {
+    return null
+  }
+}
+
+function guardFlowDir(flowDir, homeDir) {
+  const root = resolve(dirname(flowDir))
+  if (homeDir && samePath(root, homeDir)) return null
+  if (root === parsePath(root).root) return null
+  return flowDir
+}
+
+/** Path equality that ignores separators and (Windows) case. */
+export function samePath(a, b) {
+  const n = (p) => resolve(p).replace(/\\/g, '/').toLowerCase()
+  return n(a) === n(b)
+}
+
+/**
+ * All flows in `flowDir` (any status, so slug collisions can be avoided),
+ * newest first: [{ name, abs, title, status, source, done, total, mtime }].
+ * Never throws.
+ */
+export function listFlows(flowDir) {
   let names
   try {
-    names = readdirSync(dir).filter((n) => n.toLowerCase().endsWith('.md'))
+    names = readdirSync(flowDir).filter((n) => n.toLowerCase().endsWith('.md'))
   } catch {
     return []
   }
-  const active = []
+  const out = []
   for (const name of names) {
-    const content = readFlowFile(join(dir, name))
+    const abs = join(flowDir, name)
+    const content = readFlowFile(abs)
     if (content == null) continue
     const fm = readFrontmatter(content)
-    const status = (fm.status || 'active').toLowerCase()
-    if (status === 'done') continue
-    active.push({ relPath: `.flow/${name}`, title: fm.title || name.slice(0, -3), status })
+    // Not a flow: other markdown that happens to live in .flow/.
+    if (!fm.status && !/^#{1,6}\s+(steps|шаги)/im.test(content)) continue
+    const steps = content.match(/^\s*[-*]\s+\[(.)\]\s+S\d+/gm) || []
+    let mtime = 0
+    try {
+      mtime = statSync(abs).mtimeMs
+    } catch {}
+    out.push({
+      name,
+      abs,
+      title: fm.title || name.slice(0, -3),
+      status: (fm.status || 'active').toLowerCase(),
+      source: fm.source || null,
+      done: steps.filter((st) => /\[(x|X|-)\]/.test(st)).length,
+      total: steps.length,
+      mtime,
+    })
   }
-  return active
-}
-
-/** Context text injected on SessionStart so the agent keeps following the flow protocol. */
-export function buildFlowReminder(flows) {
-  if (!flows.length) return null
-  const list = flows.map((f) => `- ${f.relPath} — ${f.title} (status: ${f.status})`).join('\n')
-  return (
-    `Active flow files in this project:\n${list}\n` +
-    'Keep them updated following the /flow skill protocol: mark steps [~]/[x]/[-]/[!], ' +
-    'append journal lines for step / deviation / decision / blocked, and edit flow files only with Edit/Write.'
-  )
+  return out.sort((a, b) => b.mtime - a.mtime)
 }

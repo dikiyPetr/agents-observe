@@ -4,7 +4,7 @@
 // lines become `info` entries) and reported in `errors`, so a slightly
 // malformed file still renders in the dashboard.
 
-export type FlowStatus = 'active' | 'blocked' | 'done'
+export type FlowStatus = 'review' | 'active' | 'blocked' | 'done'
 export type StepState = 'todo' | 'doing' | 'done' | 'skipped' | 'blocked'
 export type JournalType = 'plan' | 'step' | 'deviation' | 'decision' | 'blocked' | 'info'
 export type FlowLevel = 'low' | 'normal' | 'high'
@@ -32,6 +32,8 @@ export interface ParsedFlow {
   title: string
   status: FlowStatus
   updated: string | null
+  /** Path of the plan document this flow mirrors (`source:`), if any. */
+  source: string | null
   /** Slug of the parent flow when this plan belongs to a delegated (sub)agent. */
   parent: string | null
   /** Step of the parent flow this plan implements. */
@@ -61,7 +63,7 @@ const JOURNAL_TYPES = new Set<JournalType>([
   'info',
 ])
 const LEVELS = new Set<FlowLevel>(['low', 'normal', 'high'])
-const STATUSES = new Set<FlowStatus>(['active', 'blocked', 'done'])
+const STATUSES = new Set<FlowStatus>(['review', 'active', 'blocked', 'done'])
 
 const GOAL_HEADING = /^(goal|цель)/i
 const STEPS_HEADING = /^(steps|plan|шаги|план)/i
@@ -186,6 +188,7 @@ export function parseFlow(md: string, fallbackTitle = 'Untitled flow'): ParsedFl
     title,
     status,
     updated: data.updated || null,
+    source: data.source || null,
     parent: data.parent || null,
     parentStep: data.parent_step || null,
     goal,

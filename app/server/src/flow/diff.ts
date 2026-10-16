@@ -5,10 +5,18 @@
 // async hook deliveries can't produce duplicates.
 
 import { createHash } from 'node:crypto'
-import type { FlowLevel, ParsedFlow } from './parse'
+import type { FlowJournalEntry, FlowLevel, FlowStatus, ParsedFlow } from './parse'
 
 export type FlowNotificationKind =
-  'plan' | 'step' | 'deviation' | 'decision' | 'blocked' | 'info' | 'flow_done' | 'flow_blocked'
+  | 'plan'
+  | 'step'
+  | 'deviation'
+  | 'decision'
+  | 'blocked'
+  | 'info'
+  | 'flow_review'
+  | 'flow_done'
+  | 'flow_blocked'
 
 export interface NotificationDraft {
   kind: FlowNotificationKind
@@ -29,8 +37,27 @@ const JOURNAL_TITLES: Record<string, string> = {
   info: 'Note',
 }
 
+/** Status changes that notify; moving to `active` (approval, unblock) is silent. */
+const STATUS_NOTIFICATIONS: Partial<
+  Record<FlowStatus, Pick<NotificationDraft, 'kind' | 'level' | 'title'>>
+> = {
+  review: { kind: 'flow_review', level: 'high', title: 'Plan awaiting approval' },
+  blocked: { kind: 'flow_blocked', level: 'high', title: 'Flow blocked' },
+  done: { kind: 'flow_done', level: 'normal', title: 'Flow done' },
+}
+
 function hash(text: string): string {
   return createHash('sha1').update(text.trim()).digest('hex').slice(0, 16)
+}
+
+/**
+ * A `step`/`blocked` journal line about a step shares its key with that step's
+ * marker transition: agents often send `[x]` and the journal line as two
+ * parallel Edits (two snapshots), and the user should get one notification.
+ */
+function stepKey(e: FlowJournalEntry): string | null {
+  if (!e.step || (e.type !== 'step' && e.type !== 'blocked')) return null
+  return `step:${e.step}:${e.type === 'step' ? 'done' : 'blocked'}`
 }
 
 function withStep(title: string, step: string | null): string {
@@ -49,12 +76,14 @@ function planCreated(next: ParsedFlow): NotificationDraft {
     parts.push(`part of ${next.parent}${next.parentStep ? ` · ${next.parentStep}` : ''}`)
   }
   if (planEntry?.text) parts.push(planEntry.text)
+  // A plan that first appears awaiting approval needs the user, not just a heads-up.
+  const review = next.status === 'review'
   return {
-    kind: 'plan',
-    level: planEntry?.level ?? 'normal',
+    kind: review ? 'flow_review' : 'plan',
+    level: review ? 'high' : (planEntry?.level ?? 'normal'),
     step: next.parentStep,
     tags: [...new Set(['plan', ...(planEntry?.tags ?? [])])],
-    title: next.parent ? 'Sub-plan created' : 'Plan created',
+    title: review ? 'Plan awaiting approval' : next.parent ? 'Sub-plan created' : 'Plan created',
     body: parts.join('\n'),
     dedupKey: 'started',
   }
@@ -77,7 +106,7 @@ export function diffFlow(prev: ParsedFlow | null, next: ParsedFlow): Notificatio
       tags: e.type === 'plan' ? [...new Set(['plan', ...e.tags])] : e.tags,
       title: withStep(JOURNAL_TITLES[e.type], e.step),
       body: e.text,
-      dedupKey: `j:${hash(e.raw)}`,
+      dedupKey: stepKey(e) ?? `j:${hash(e.raw)}`,
     })
   }
 
@@ -100,13 +129,12 @@ export function diffFlow(prev: ParsedFlow | null, next: ParsedFlow): Notificatio
     })
   }
 
-  if (next.status !== prev.status && next.status !== 'active') {
+  const status = STATUS_NOTIFICATIONS[next.status]
+  if (next.status !== prev.status && status) {
     drafts.push({
-      kind: next.status === 'done' ? 'flow_done' : 'flow_blocked',
-      level: next.status === 'done' ? 'normal' : 'high',
+      ...status,
       step: null,
       tags: [],
-      title: next.status === 'done' ? 'Flow done' : 'Flow blocked',
       body: next.title,
       dedupKey: `status:${next.status}:${next.updated ?? next.journal.length}`,
     })
