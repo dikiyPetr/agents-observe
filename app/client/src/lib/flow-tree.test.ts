@@ -45,6 +45,7 @@ function flow(
       title: slug,
       status: 'active',
       updated: null,
+      source: null,
       parent: opts.parent ?? null,
       parentStep: opts.parentStep ?? null,
       goal: '',

@@ -13,7 +13,33 @@ cd agents-observe
 cd app/server; npm install; cd ../client; npm install; cd ../..
 ```
 
-## 2. Запустить панель
+## 2. Запуск панели
+
+### Автоматически при старте сессии (рекомендуется)
+
+Хук старта сессии сам поднимает сервер из вашего клона, если он не запущен, и тот сам
+останавливается через 30 с после закрытия последней сессии или вкладки панели. В `env`
+пользовательских настроек `~/.claude/settings.json`:
+
+```json
+{
+  "env": {
+    "AGENTS_OBSERVE_RUNTIME": "local",
+    "AGENTS_OBSERVE_SERVER_DIR": "D:/projects/dash/agents-observe",
+    "AGENTS_OBSERVE_LOCAL_DATA_ROOT": "C:/Users/<you>/.agents-observe"
+  }
+}
+```
+
+- `AGENTS_OBSERVE_SERVER_DIR` — клон из шага 1 (с установленными зависимостями): копия плагина
+  в кэше Claude Code своих зависимостей не имеет.
+- `AGENTS_OBSERVE_LOCAL_DATA_ROOT` — одна база для автозапуска и ручного запуска.
+- Клиент собирается при первом запуске (дольше обычного) и пересобирается, только когда
+  изменились его исходники. Лог сервера: `<LOCAL_DATA_ROOT>/logs/server.log`.
+
+Панель: http://localhost:4981.
+
+### Вручную (разработка панели, hot reload)
 
 Из корня `agents-observe`, в отдельном терминале — держать открытым, пока работаешь:
 
@@ -63,13 +89,11 @@ claude plugin update agents-observe@agents-observe
 ```json
 {
   "env": {
-    "AGENTS_OBSERVE_RUNTIME": "dev",
     "AGENTS_OBSERVE_PROJECT_SLUG": "my-game"
   }
 }
 ```
 
-- `AGENTS_OBSERVE_RUNTIME` — чтобы при выключенной панели хук не пытался запускать Docker.
 - `AGENTS_OBSERVE_PROJECT_SLUG` — имя проекта в панели (необязательно, по умолчанию — имя папки).
   В монорепо задайте один slug для всех пакетов: flow лежат в `.flow/` у корня git.
 - Папка `.flow/` — обычные файлы рабочего дерева. Коммитить их или добавить в `.gitignore` —
