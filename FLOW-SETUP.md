@@ -10,7 +10,6 @@
 ```powershell
 git clone https://github.com/dikiyPetr/agents-observe.git
 cd agents-observe
-git switch feat/flow-notifications
 cd app/server; npm install; cd ../client; npm install; cd ../..
 ```
 
@@ -28,21 +27,34 @@ bash: `AGENTS_OBSERVE_RUNTIME=dev AGENTS_OBSERVE_SHUTDOWN_DELAY_MS=0 node start.
 
 ## 3. Установить плагин в Claude Code (один раз)
 
-```powershell
-claude plugin marketplace add <путь-к>/agents-observe
-claude plugin install agents-observe@agents-observe --scope user
-```
-
-Claude Code копирует плагин в свой кэш (`~/.claude/plugins/cache/…`) по версии из `plugin.json`.
-Пока версия не поменялась, `plugin update` копию не обновит, поэтому после `git pull`
-переустановите плагин и перезапустите сессию Claude:
+Плагин ставится из форка на GitHub (ветка `main`), а не из локальной папки:
 
 ```powershell
-claude plugin uninstall agents-observe@agents-observe
+claude plugin marketplace add dikiyPetr/agents-observe
 claude plugin install agents-observe@agents-observe --scope user
 ```
 
 Плагин добавляет хуки (события → панель, правила flow) и скилл `/flow`.
+Перезапустите сессию Claude, чтобы хуки подхватились.
+
+### Обновление плагина
+
+Claude Code хранит копию плагина в кэше (`~/.claude/plugins/cache/agents-observe/…`) по версии
+из `.claude-plugin/plugin.json` и заменяет её, только когда версия выросла. Порядок выпуска:
+
+1. Влить изменения в `main` форка.
+2. Поднять версию в `VERSION`, `package.json` и `.claude-plugin/plugin.json`.
+3. `git push origin main`.
+4. Обновить копию и перезапустить сессию Claude:
+
+```powershell
+claude plugin marketplace update agents-observe
+claude plugin update agents-observe@agents-observe
+```
+
+Проверить установленную версию: `claude plugin list`. Попробовать незапушенные правки без
+выпуска: `claude --plugin-dir <путь-к>/agents-observe` (только для этой сессии; установленный
+плагин на время такой проверки лучше отключить: `claude plugin disable agents-observe@agents-observe`).
 
 ## 4. Настроить проект
 
