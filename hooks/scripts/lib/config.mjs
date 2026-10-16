@@ -210,6 +210,9 @@ export function getConfig(overrides = {}) {
      */
     serverDir: resolve(overrides.serverDir || process.env.AGENTS_OBSERVE_SERVER_DIR || installDir),
 
+    /** Windows: show a tray icon for an auto-started local server. AGENTS_OBSERVE_TRAY=0 disables it. */
+    trayEnabled: process.platform === 'win32' && process.env.AGENTS_OBSERVE_TRAY !== '0',
+
     cliPath: resolve(installDir, './hooks/scripts/observe_cli.mjs'),
     logLevel: (overrides.logLevel || process.env.AGENTS_OBSERVE_LOG_LEVEL || 'warn').toLowerCase(),
     logsDir: resolve(installDir, process.env.AGENTS_OBSERVE_LOGS_DIR || `${localDataRootDir}/logs`),
